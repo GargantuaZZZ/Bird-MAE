@@ -1,4 +1,3 @@
-/src/
 /data/
 /lightning_logs/
 /logs/
@@ -18,3 +17,8 @@ util/__pycache__/pos_embed.cpython-310.pyc
 run_overnight.sh
 start_mlflow.sh
 *.db
+
+**/.DS_Store
+
+/BirdSet_script/
+/hf_cache/

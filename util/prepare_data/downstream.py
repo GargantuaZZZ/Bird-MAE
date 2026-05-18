@@ -12,6 +12,7 @@ def process_downstream_datasets(
     skip_download: bool,
     dataset_script_path: str | None,
     data_dir_base: str,
+    output_dir_base: str | None,
 ):
     """
     Loads and prepares BirdSet datasets.
@@ -52,6 +53,7 @@ def process_downstream_datasets(
             dataset= DatasetConfig(
                 data_dir=data_dir,
                 cache_dir=f"{cache_dir_base}/{name}",
+                output_dir=(f"{output_dir_base}/{name}" if output_dir_base else None),
                 hf_path=hf_path,
                 hf_name=name,
                 n_workers=3,
@@ -97,6 +99,12 @@ if __name__ == "__main__":
         default=None,
         help="Local BirdSet script path (e.g., /path/to/BirdSet.py) for offline use."
     )
+    parser.add_argument(
+        "--output-dir-base",
+        type=str,
+        default=None,
+        help="Base directory for processed dataset output (e.g., /data/birdset/processed)."
+    )
 
     args = parser.parse_args()
     
@@ -107,5 +115,6 @@ if __name__ == "__main__":
         args.skip_download,
         args.dataset_script_path,
         data_dir_base,
+        args.output_dir_base,
     )
 

@@ -13,6 +13,8 @@ class DatasetConfig:
         Specifies the directory where the dataset files are stored. **Important**: The dataset uses a lot of disk space, so make sure you have enough storage available.
     cache_dir : str, optional
         Directory for Hugging Face datasets cache. If None, falls back to data_dir.
+    output_dir : str, optional
+        Directory for saving processed datasets. If None, falls back to data_dir.
     hf_path : str
         The path to the dataset stored on HuggingFace.
     hf_name : str
@@ -44,6 +46,7 @@ class DatasetConfig:
     """
     data_dir: str = "/workspace/data_birdset"
     cache_dir: Optional[str] = None
+    output_dir: Optional[str] = None
     hf_path: str = "ashraq/esc50"
     hf_name: str = "esc50"
     seed: int = 42

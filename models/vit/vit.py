@@ -202,8 +202,13 @@ class VIT(L.LightningModule,VisionTransformer):
 
     def random_masking_2d(self, x):
         N, L, D = x.shape
-        T = 64 # AUDIOSET
-        F = 8 # AUDIOSET
+        # Infer T/F from patch layout to avoid hard-coded AudioSet assumptions.
+        F = 8
+        if hasattr(self, "img_size_y") and self.img_size_y:
+            F = self.img_size_y // 16
+        if L % F != 0:
+            return x, None, None
+        T = L // F
 
         # mask T
         x = x.reshape(N, T, F, D)

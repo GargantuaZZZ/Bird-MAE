@@ -156,8 +156,9 @@ class BaseDataModuleHF(L.LightningDataModule):
             else dataset._fingerprint
         )  # changed to next_iter to be more robust
 
+        output_dir = self.dataset_config.output_dir or self.dataset_config.data_dir
         self.disk_save_path = os.path.join(
-            self.dataset_config.data_dir,
+            output_dir,
             f"{self.dataset_config.hf_name}_processed_{self.dataset_config.seed}_{fingerprint}",
         )
 

@@ -375,19 +375,25 @@ class VIT(L.LightningModule,VisionTransformer):
         #img_size = (128, self.target_length) # should be correcter, but not pretrained this way
 
         if self.target_length == 512: #esc50, hsn, 5 seconds
-            #num_patches = 512 # audioset
-            if "xc" in self.pretrained_weights_path or "XCL" in self.pretrained_weights_path:
-                num_patches = 256 # birdset
-            else:
-                num_patches = 512 # audioset
-
-            self.patch_embed = PatchEmbed(img_size, 16, 1, self.embed_dim)
-            #self.patch_embed = PatchEmbed_org(img_size, 16, 1, self.embed_dim)
-            self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, self.embed_dim), requires_grad=False) #to load pretrained pos embed
             try:
                 pre_state_dict = torch.load(pretrained_weights_path, map_location="cpu")["model"]
             except:
                 pre_state_dict = torch.load(pretrained_weights_path, map_location="cpu")["state_dict"]
+
+            # Infer number of patches from checkpoint pos_embed when available.
+            if "pos_embed" in pre_state_dict:
+                num_patches = pre_state_dict["pos_embed"].shape[1] - 1
+            elif "encoder.pos_embed" in pre_state_dict:
+                num_patches = pre_state_dict["encoder.pos_embed"].shape[1] - 1
+            else:
+                if "xc" in self.pretrained_weights_path or "XCL" in self.pretrained_weights_path:
+                    num_patches = 256 # birdset
+                else:
+                    num_patches = 512 # audioset
+
+            self.patch_embed = PatchEmbed(img_size, 16, 1, self.embed_dim)
+            #self.patch_embed = PatchEmbed_org(img_size, 16, 1, self.embed_dim)
+            self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, self.embed_dim), requires_grad=False) #to load pretrained pos embed
 
             pretrained_state_dict = {}
 
@@ -847,19 +853,25 @@ class VIT_ppnet(L.LightningModule,VisionTransformer):
         #img_size = (128, self.target_length) # should be correcter, but not pretrained this way
 
         if self.target_length == 512: #esc50, hsn, 5 seconds
-            #num_patches = 512 # audioset
-            if "xc" in self.pretrained_weights_path or "XCL" in self.pretrained_weights_path:
-                num_patches = 256 # birdset
-            else:
-                num_patches = 512 # audioset
-
-            self.patch_embed = PatchEmbed(img_size, 16, 1, self.embed_dim)
-            #self.patch_embed = PatchEmbed_org(img_size, 16, 1, self.embed_dim)
-            self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, self.embed_dim), requires_grad=False) #to load pretrained pos embed
             try:
                 pre_state_dict = torch.load(pretrained_weights_path, map_location="cpu")["model"]
             except:
                 pre_state_dict = torch.load(pretrained_weights_path, map_location="cpu")["state_dict"]
+
+            # Infer number of patches from checkpoint pos_embed when available.
+            if "pos_embed" in pre_state_dict:
+                num_patches = pre_state_dict["pos_embed"].shape[1] - 1
+            elif "encoder.pos_embed" in pre_state_dict:
+                num_patches = pre_state_dict["encoder.pos_embed"].shape[1] - 1
+            else:
+                if "xc" in self.pretrained_weights_path or "XCL" in self.pretrained_weights_path:
+                    num_patches = 256 # birdset
+                else:
+                    num_patches = 512 # audioset
+
+            self.patch_embed = PatchEmbed(img_size, 16, 1, self.embed_dim)
+            #self.patch_embed = PatchEmbed_org(img_size, 16, 1, self.embed_dim)
+            self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, self.embed_dim), requires_grad=False) #to load pretrained pos embed
 
             pretrained_state_dict = {}
 

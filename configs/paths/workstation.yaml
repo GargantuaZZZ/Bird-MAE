@@ -1,4 +1,4 @@
-root_dir: ${oc.env:PROJECT_ROOT}
+root_dir: /data0/zhr21/GitHub_repo/Bird-MAE
 work_dir: ${hydra:runtime.cwd}
 
 #output

@@ -2,7 +2,7 @@
 defaults:
   - _self_
   - callbacks: default
-  - data/dataset: audioset_balanced
+  - data/dataset: HSN
   - data/loaders: audioset_balanced
   - data/transform: melbank_as
   - logger: mlflow

@@ -455,6 +455,8 @@ class NoCallMixer:
         return absolute_file_paths
 
     def __call__(self, input_values, labels):
+        if not hasattr(labels, "shape"):
+            labels = torch.tensor(labels)
         b, c = labels.shape
         for idx in range(len(input_values)):
             if random.random() < self.p:

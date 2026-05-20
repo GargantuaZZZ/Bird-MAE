@@ -11,7 +11,7 @@ defaults:
   - module/optimizer: adamw
   - module/scheduler: cosine
   - module/loss: binary_cross_entropy
-  - module/metric: map
+  - module/metric: birdset_collection
   - paths: workstation
   - trainer: single_gpu
   - experiment: null

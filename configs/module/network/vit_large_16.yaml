@@ -15,6 +15,7 @@ depth: 24
 drop_path: 0.1
 num_classes: ${data.dataset.num_classes} 
 pos_trainable: False
+target_length: ${data.dataset.target_length}
 
 pretrained_weights_path: /data0/zhr21/misc/model_weights/birdmae_base_model.ckpt
 

@@ -62,7 +62,7 @@ module:
       decay_type: right
       
   network:
-    pretrained_weights_path: /mnt/work/bird2vec/logs_pretrain_audioset_MAE/pretrain_xcl_wave/runs/XCL/AudioMAE/2024-11-24_212406/callback_checkpoints/AudioMAE_XCL_epoch=99.ckpt
+    pretrained_weights_path: /data0/zhr21/misc/model_weights/birdmae_base_model.ckpt
     ema_update_rate: null
     name: VIT_ppnet
     freeze_backbone: false

@@ -33,7 +33,7 @@ data:
       shuffle: true
       drop_last: true
   dataset:
-    save_to_disk: /scratch/birdset/HSN/HSN_processed_42_af8bbf517e45e99d_d9dd5751bb728754_c3aa30664ea8e4a0
+    save_to_disk: /data0/zhr21/datasets/BirdSet/processed/HSN
     
 trainer:
   max_epochs: 30

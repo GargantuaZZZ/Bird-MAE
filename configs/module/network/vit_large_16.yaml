@@ -17,7 +17,7 @@ num_classes: ${data.dataset.num_classes}
 pos_trainable: False
 target_length: ${data.dataset.target_length}
 
-pretrained_weights_path: /data0/zhr21/misc/model_weights/birdmae_base_model.ckpt
+pretrained_weights_path: /data0/zhr21/misc/model_weights/birdmae_large_model.ckpt
 
 mask2d: ${data.transform.mask2d}
 mask_t_prob: ${data.transform.mask_t_prob}

@@ -347,3 +347,27 @@ HSN 被用作开发集（validation set），所有超参数在 HSN 上调优后
 
 **Q: 需要修改哪些路径？**
 主要修改 Hydra 配置文件和 SLURM 脚本中的数据路径、输出路径和 checkpoint 路径。
+
+
+
+## 复现命令
+
+**准备数据**
+```bash
+python util/prepare_data/downstream.py \
+  --dataset-names HSN \
+  --data-dir-base /data0/zhr21/datasets/BirdSet/raw \
+  --cache-dir-base /data0/zhr21/datasets/BirdSet/cached \
+  --dataset-script-path util/BirdSet.py \
+  --output-dir-base /data0/zhr21/datasets/BirdSet/processed \
+  --skip-download
+```
+
+**finetune**
+```bash
+ CUDA_VISIBLE_DEVICES=0 python finetune.py \
+    data.transform.waveform_augmentations=null \
+    experiment=paper/bigshot/birdMAE/frozenpp/hsn_large_ppnet.yaml \
+    trainer.enable_checkpointing=True \
+    data.transform.no_call_mixer=null
+```

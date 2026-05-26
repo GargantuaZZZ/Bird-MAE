@@ -13,6 +13,8 @@ def process_downstream_datasets(
     dataset_script_path: str | None,
     data_dir_base: str,
     output_dir_base: str | None,
+    n_workers: int,
+    delete_archive: bool,
 ):
     """
     Loads and prepares BirdSet datasets.
@@ -23,6 +25,10 @@ def process_downstream_datasets(
     """
     use_local_script = bool(dataset_script_path)
     effective_skip_download = skip_download or use_local_script
+    if delete_archive:
+        os.environ["BIRDSET_DELETE_ARCHIVE"] = "1"
+    else:
+        os.environ["BIRDSET_DELETE_ARCHIVE"] = "0"
 
     if not effective_skip_download:
         for name in dataset_names:
@@ -56,7 +62,7 @@ def process_downstream_datasets(
                 output_dir=(f"{output_dir_base}/{name}" if output_dir_base else None),
                 hf_path=hf_path,
                 hf_name=name,
-                n_workers=3,
+                n_workers=n_workers,
                 val_split=0.0001,
                 task="multilabel",
                 classlimit=500,
@@ -105,6 +111,17 @@ if __name__ == "__main__":
         default=None,
         help="Base directory for processed dataset output (e.g., /data/birdset/processed)."
     )
+    parser.add_argument(
+        "--n-workers",
+        type=int,
+        default=3,
+        help="Number of workers for dataset map operations (e.g., one-hot encoding)."
+    )
+    parser.add_argument(
+        "--delete-archive",
+        action="store_true",
+        help="Delete tar.gz archives after extraction (default: keep)."
+    )
 
     args = parser.parse_args()
     
@@ -116,5 +133,7 @@ if __name__ == "__main__":
         args.dataset_script_path,
         data_dir_base,
         args.output_dir_base,
+        args.n_workers,
+        args.delete_archive,
     )
 

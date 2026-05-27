@@ -33,8 +33,7 @@ data:
       shuffle: true
       drop_last: true
   dataset:
-    #save_to_disk: /scratch/birdset/POW/POW_processed_42_d7d86f638389ea0d_7c72d9a9100085c1_68bfb87ba237229d
-    save_to_disk: /scratch/birdset/POW/POW_64shot_1
+    save_to_disk: /data0/zhr21/datasets/BirdSet/processed/POW
 
     
 trainer:

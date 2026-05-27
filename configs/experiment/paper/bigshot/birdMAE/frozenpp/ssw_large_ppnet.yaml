@@ -33,8 +33,7 @@ data:
       shuffle: true
       drop_last: true
   dataset:
-    #save_to_disk: /scratch/birdset/SSW/SSW_processed_42_5c61c6e6cb8ce891_88d4dccff5421051_e1d39ad9b26c7918
-    save_to_disk: /scratch/birdset/SSW/SSW_64shot_1
+    save_to_disk: /data0/zhr21/datasets/BirdSet/processed/SSW
 
     
 trainer:

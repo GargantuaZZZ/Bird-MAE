@@ -32,7 +32,7 @@ data:
       shuffle: true
       drop_last: true
   dataset:
-    save_to_disk: /scratch/birdset/PER/PER_64shot_1
+    save_to_disk: /data0/zhr21/datasets/BirdSet/processed/PER
 
 trainer:
   max_epochs: 30

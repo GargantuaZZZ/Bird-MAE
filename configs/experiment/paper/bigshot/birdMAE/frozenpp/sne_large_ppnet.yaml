@@ -33,8 +33,7 @@ data:
       shuffle: true
       drop_last: true
   dataset:
-    #save_to_disk: /scratch/birdset/SNE/SNE_processed_42_7a1729905a047e57_42c1e5db900b536a_5a10cf3fbce121f9
-    save_to_disk: /scratch/birdset/SNE/SNE_64shot_1
+    save_to_disk: /data0/zhr21/datasets/BirdSet/processed/SNE
 
     
 trainer:

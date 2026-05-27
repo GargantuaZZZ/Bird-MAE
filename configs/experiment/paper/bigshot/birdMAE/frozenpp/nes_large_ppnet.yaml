@@ -33,8 +33,7 @@ data:
       shuffle: true
       drop_last: true
   dataset:
-    #save_to_disk: /scratch/birdset/NES/NES_processed_42_f9fd29e6a06779b6_2fa8dd926752a668_fa68dd2bf32fbe19
-    save_to_disk: /scratch/birdset/NES/NES_64shot_1
+    save_to_disk: /data0/zhr21/datasets/BirdSet/processed/NES
 
     
 trainer:

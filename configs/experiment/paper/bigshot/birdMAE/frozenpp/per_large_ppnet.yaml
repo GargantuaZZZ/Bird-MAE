@@ -33,8 +33,7 @@ data:
       shuffle: true
       drop_last: true
   dataset:
-    #save_to_disk: /scratch/birdset/PER/PER_processed_42_7cc2b010c638b813_8032cd6b9283714d_94b89c8b3396a4cd
-    save_to_disk: /scratch/birdset/PER/PER_64shot_1
+    save_to_disk: /data0/zhr21/datasets/BirdSet/processed/PER
 
     
 trainer:

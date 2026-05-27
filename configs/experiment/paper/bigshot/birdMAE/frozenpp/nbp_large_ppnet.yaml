@@ -33,8 +33,7 @@ data:
       shuffle: true
       drop_last: true
   dataset:
-    #save_to_disk: /scratch/birdset/NBP/NBP_processed_42_21ab4e5b0a2b5110_2b7131fbef72bd67_8c71368c0f26e2e8
-    save_to_disk: /scratch/birdset/NBP/NBP_64shot_1
+    save_to_disk: /data0/zhr21/datasets/BirdSet/processed/NBP
 
     
 trainer:

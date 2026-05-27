@@ -358,9 +358,10 @@ python util/prepare_data/downstream.py \
   --dataset-names HSN \
   --data-dir-base /data0/zhr21/datasets/BirdSet/raw \
   --cache-dir-base /data0/zhr21/datasets/BirdSet/cached \
-  --dataset-script-path util/BirdSet.py \
+  --dataset-script-path BirdSet_scripts/BirdSet.py \
   --output-dir-base /data0/zhr21/datasets/BirdSet/processed \
-  --skip-download
+  --skip-download \
+  --n-workers 1
 ```
 
 **finetune**

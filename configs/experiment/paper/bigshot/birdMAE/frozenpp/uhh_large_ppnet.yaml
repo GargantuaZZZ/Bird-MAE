@@ -33,8 +33,7 @@ data:
       shuffle: true
       drop_last: true
   dataset:
-    #save_to_disk: /scratch/birdset/UHH/UHH_processed_42_db84ae1732b16771_5d36d23152f56066_f61fff834b2c8c3b
-    save_to_disk: /scratch/birdset/UHH/UHH_64shot_1
+    save_to_disk: /data0/zhr21/datasets/BirdSet/processed/UHH
 
     
 trainer:

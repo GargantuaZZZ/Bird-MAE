@@ -125,7 +125,10 @@ def finetune(cfg: DictConfig):
 
     if cfg.test:
         log.info("Start testing")
-        trainer.test(model=model, datamodule=datamodule, ckpt_path="last")
+        ckpt_path = cfg.get("ckpt_path", "last")
+        if ckpt_path in (None, "", "none", "null"):
+            ckpt_path = None
+        trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
 
         
 if __name__ == "__main__":

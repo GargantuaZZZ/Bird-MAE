@@ -23,4 +23,5 @@ task_name: "finetune"
 
 train: true
 test: true
+ckpt_path: last
  

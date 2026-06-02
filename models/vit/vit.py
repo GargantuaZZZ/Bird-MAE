@@ -253,7 +253,6 @@ class VIT(L.LightningModule,VisionTransformer):
 
         pred = self.head(features)
 
-        self.test_features.append(features.detach().cpu())
         targets = targets.long()
         try:
             loss  = self.loss(pred, targets)
@@ -312,7 +311,13 @@ class VIT(L.LightningModule,VisionTransformer):
         self.mask_t_prob = 0.0
         self.mask_f_prob = 0.0 
 
-        pred = self(audio)
+        if self.mask_t_prob > 0.0 or self.mask_f_prob > 0.0:
+            features = self.forward_features_mask(audio)
+        else:
+            features = self.forward_features(audio)
+
+        pred = self.head(features)
+        self.test_features.append(features.detach().cpu())
 
         if self.class_mask: 
             pred = pred[:, self.class_mask]
@@ -627,6 +632,7 @@ class VIT_ppnet(L.LightningModule,VisionTransformer):
         self.val_targets = []
         self.test_predictions = []
         self.test_targets = []
+        self.test_features = []
         
         self.ema = None
         if self.ema_update_rate: 
@@ -650,7 +656,7 @@ class VIT_ppnet(L.LightningModule,VisionTransformer):
         del self.head_drop
         
 
-    def forward_features(self, x):
+    def forward_features(self, x, return_features=False):
         B = x.shape[0]
         #x = x.permute(0,1,3,2) # test!!
         x = self.patch_embed(x) # batch, patch, embed
@@ -676,7 +682,10 @@ class VIT_ppnet(L.LightningModule,VisionTransformer):
         else:
             x = x[:,1:,:].permute(0,2,1).reshape(B, self.embed_dim, 8, 32)
 
-        logits,_ = self.ppnet(x)
+        logits, additional_returns = self.ppnet(x)
+
+        if return_features:
+            return logits, additional_returns[0]
 
         return logits
     
@@ -756,7 +765,8 @@ class VIT_ppnet(L.LightningModule,VisionTransformer):
         self.mask_t_prob = 0.0
         self.mask_f_prob = 0.0 #fix later!
 
-        pred = self(audio)
+        pred, features = self.forward_features(audio, return_features=True)
+        self.test_features.append(features.detach().cpu())
         if self.class_mask: 
         # if targets.shape == pred.shape:
         #     targets = targets[:, self.class_mask]
@@ -785,6 +795,24 @@ class VIT_ppnet(L.LightningModule,VisionTransformer):
         self.test_add_metrics(preds, targets)
         for name, metric in self.test_add_metrics.items():
             self.log(f'test_{name}', metric, on_epoch=True, prog_bar=True)
+
+        save_dir = os.path.join(self.trainer.default_root_dir, "analysis_outputs")
+        os.makedirs(save_dir, exist_ok=True)
+
+        preds_np = torch.cat(self.test_predictions).sigmoid().numpy()
+        targets_np = torch.cat(self.test_targets).numpy()
+        features_np = torch.cat(self.test_features).numpy()
+
+        np.savez(
+            os.path.join(save_dir, f"{self.__class__.__name__}_test_outputs.npz"),
+            preds=preds_np,
+            targets=targets_np,
+            features=features_np,
+        )
+
+        self.test_features = []
+        self.test_predictions = []
+        self.test_targets = []
 
     def configure_optimizers(self):
         

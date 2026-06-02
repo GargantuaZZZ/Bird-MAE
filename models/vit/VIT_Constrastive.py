@@ -1,8 +1,7 @@
 
 from functools import partial
-
 import os
-
+import numpy as np
 import hydra
 import lightning as L
 import torch
@@ -10,7 +9,6 @@ import torch.nn as nn
 from torch.nn import functional as F
 import datasets
 import copy
-import numpy as np
 from timm.models.layers import trunc_normal_
 from timm.models.vision_transformer import VisionTransformer,PatchEmbed
 from util.pos_embed import get_2d_sincos_pos_embed_flexible
@@ -22,6 +20,77 @@ from ..components.cosine_warmup import CosineWarmupScheduler
 from ..components.ema import EMA
 from ..ppnet.ppnet import PPNet
 from torchmetrics import MetricCollection
+
+
+class MultiLabelSupConLoss(nn.Module):
+    """
+    Multi-label supervised contrastive loss for BirdSet-style multi-hot labels.
+
+    Positive pair definition:
+        sample i and sample j are positive if they share at least one species label,
+        i.e., y_i^T y_j > 0.
+
+    This version ignores anchors with no positive sample in the current mini-batch.
+    """
+    def __init__(self, temperature=0.07, eps=1e-8):
+        super().__init__()
+        self.temperature = temperature
+        self.eps = eps
+
+    def forward(self, features, targets):
+        # features: [B, D], targets: [B, C]
+        device = features.device
+        batch_size = features.size(0)
+
+        features = F.normalize(features, dim=1)
+        targets = targets.float()
+
+        # positive if two samples share at least one active label
+        pos_mask = torch.matmul(targets, targets.T) > 0
+
+        # remove self-comparison
+        self_mask = torch.eye(batch_size, dtype=torch.bool, device=device)
+        pos_mask = pos_mask & (~self_mask)
+
+        # no positive pair in this batch: return zero loss safely
+        if pos_mask.sum() == 0:
+            return features.new_tensor(0.0)
+
+        logits = torch.matmul(features, features.T) / self.temperature
+        logits = logits - logits.max(dim=1, keepdim=True).values.detach()
+
+        logits_mask = ~self_mask
+        exp_logits = torch.exp(logits) * logits_mask.float()
+        log_prob = logits - torch.log(exp_logits.sum(dim=1, keepdim=True) + self.eps)
+
+        pos_mask_float = pos_mask.float()
+        mean_log_prob_pos = (pos_mask_float * log_prob).sum(dim=1) / (
+            pos_mask_float.sum(dim=1) + self.eps
+        )
+
+        valid_anchor = pos_mask_float.sum(dim=1) > 0
+        loss = -mean_log_prob_pos[valid_anchor].mean()
+        return loss
+
+
+class ContrastiveProjectionHead(nn.Module):
+    """
+    Small projection head used only for the contrastive auxiliary loss.
+    The original classification head remains unchanged.
+    """
+    def __init__(self, in_dim, hidden_dim=512, out_dim=128, dropout=0.0):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, out_dim),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+
 
 class VIT(L.LightningModule,VisionTransformer):
 
@@ -75,6 +144,8 @@ class VIT(L.LightningModule,VisionTransformer):
         self.save_hyperparameters()
         self.img_size = (img_size_x, img_size_y)
         self.global_pool = global_pool
+        self.test_features = []
+        self.test_projections = []
 
         norm_layer = partial(nn.LayerNorm, eps=eps)
         self.fc_norm = norm_layer(embed_dim)
@@ -126,7 +197,6 @@ class VIT(L.LightningModule,VisionTransformer):
         self.val_targets = []
         self.test_predictions = []
         self.test_targets = []
-        self.test_features = []
         
         self.ema = None
         if self.ema_update_rate: 
@@ -156,17 +226,28 @@ class VIT(L.LightningModule,VisionTransformer):
             x = blk(x)
             #x = torch.nan_to_num(x, nan=0.0) 
 
-        if self.global_pool != "average": 
-            x = x[:, 1:, :].mean(dim=1)  
+        if self.global_pool == "average" or self.global_pool is True:
+            x = x[:, 1:, :].mean(dim=1)
             outcome = self.fc_norm(x)
-        elif self.global_pool =="attentive":
+        elif self.global_pool == "attentive":
             outcome = self.attentive_probe(x)
             outcome = self.fc_norm(outcome)
-        elif self.global_pool == "cls":
+        elif self.global_pool == "cls" or self.global_pool is False:
             x = self.norm(x)
             outcome = x[:, 0]
         else:
             raise ValueError(f"Invalid global pool type: {self.global_pool}")
+        #if self.global_pool != "average": 
+        #    x = x[:, 1:, :].mean(dim=1)  
+        #    outcome = self.fc_norm(x)
+        #elif self.global_pool =="attentive":
+        #    outcome = self.attentive_probe(x)
+        #    outcome = self.fc_norm(outcome)
+        #elif self.global_pool == "cls":
+        #    x = self.norm(x)
+        #    outcome = x[:, 0]
+        #else:
+        #    raise ValueError(f"Invalid global pool type: {self.global_pool}")
         return outcome
     
     def forward_features_mask(self, x):
@@ -206,13 +287,8 @@ class VIT(L.LightningModule,VisionTransformer):
 
     def random_masking_2d(self, x):
         N, L, D = x.shape
-        # Infer T/F from patch layout to avoid hard-coded AudioSet assumptions.
-        F = 8
-        if hasattr(self, "img_size_y") and self.img_size_y:
-            F = self.img_size_y // 16
-        if L % F != 0:
-            return x, None, None
-        T = L // F
+        T = 64 # AUDIOSET
+        F = 8 # AUDIOSET
 
         # mask T
         x = x.reshape(N, T, F, D)
@@ -246,14 +322,7 @@ class VIT(L.LightningModule,VisionTransformer):
     def training_step(self, batch, batch_idx):
         audio = batch["audio"]
         targets = batch["label"]
-        if self.mask_t_prob > 0.0 or self.mask_f_prob > 0.0:
-            features = self.forward_features_mask(audio)
-        else:
-            features = self.forward_features(audio)
-
-        pred = self.head(features)
-
-        self.test_features.append(features.detach().cpu())
+        pred = self(audio)
         targets = targets.long()
         try:
             loss  = self.loss(pred, targets)
@@ -312,7 +381,19 @@ class VIT(L.LightningModule,VisionTransformer):
         self.mask_t_prob = 0.0
         self.mask_f_prob = 0.0 
 
-        pred = self(audio)
+        #pred = self(audio)
+        if self.mask_t_prob > 0.0 or self.mask_f_prob > 0.0:
+            features = self.forward_features_mask(audio)
+        else:
+            features = self.forward_features(audio)
+
+        pred = self.head(features)
+
+        self.test_features.append(features.detach().cpu())
+
+        if hasattr(self, "proj_head"):
+            proj = self.proj_head(features)
+            self.test_projections.append(proj.detach().cpu())
 
         if self.class_mask: 
             pred = pred[:, self.class_mask]
@@ -340,7 +421,6 @@ class VIT(L.LightningModule,VisionTransformer):
         self.test_add_metrics(preds, targets)
         for name, metric in self.test_add_metrics.items():
             self.log(f'test_{name}', metric, on_epoch=True, prog_bar=True)
-
         save_dir = os.path.join(self.trainer.default_root_dir, "analysis_outputs")
         os.makedirs(save_dir, exist_ok=True)
 
@@ -348,14 +428,22 @@ class VIT(L.LightningModule,VisionTransformer):
         targets_np = torch.cat(self.test_targets).numpy()
         features_np = torch.cat(self.test_features).numpy()
 
+        save_dict = {
+            "preds": preds_np,
+            "targets": targets_np,
+            "features": features_np,
+        }
+
+        if len(self.test_projections) > 0:
+            save_dict["proj"] = torch.cat(self.test_projections).numpy()
+
         np.savez(
             os.path.join(save_dir, f"{self.__class__.__name__}_test_outputs.npz"),
-            preds=preds_np,
-            targets=targets_np,
-            features=features_np,
+            **save_dict
         )
 
         self.test_features = []
+        self.test_projections = []
         self.test_predictions = []
         self.test_targets = []
 
@@ -409,25 +497,19 @@ class VIT(L.LightningModule,VisionTransformer):
         #img_size = (128, self.target_length) # should be correcter, but not pretrained this way
 
         if self.target_length == 512: #esc50, hsn, 5 seconds
-            try:
-                pre_state_dict = torch.load(pretrained_weights_path, map_location="cpu")["model"]
-            except:
-                pre_state_dict = torch.load(pretrained_weights_path, map_location="cpu")["state_dict"]
-
-            # Infer number of patches from checkpoint pos_embed when available.
-            if "pos_embed" in pre_state_dict:
-                num_patches = pre_state_dict["pos_embed"].shape[1] - 1
-            elif "encoder.pos_embed" in pre_state_dict:
-                num_patches = pre_state_dict["encoder.pos_embed"].shape[1] - 1
+            #num_patches = 512 # audioset
+            if "xc" in self.pretrained_weights_path or "XCL" in self.pretrained_weights_path:
+                num_patches = 256 # birdset
             else:
-                if "xc" in self.pretrained_weights_path or "XCL" in self.pretrained_weights_path:
-                    num_patches = 256 # birdset
-                else:
-                    num_patches = 512 # audioset
+                num_patches = 512 # audioset
 
             self.patch_embed = PatchEmbed(img_size, 16, 1, self.embed_dim)
             #self.patch_embed = PatchEmbed_org(img_size, 16, 1, self.embed_dim)
             self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, self.embed_dim), requires_grad=False) #to load pretrained pos embed
+            try:
+                pre_state_dict = torch.load(pretrained_weights_path, map_location="cpu")["model"]
+            except:
+                pre_state_dict = torch.load(pretrained_weights_path, map_location="cpu")["state_dict"]
 
             pretrained_state_dict = {}
 
@@ -501,6 +583,69 @@ class VIT(L.LightningModule,VisionTransformer):
             self.load_state_dict(pretrained_state_dict, strict=False)
 
             trunc_normal_(self.head.weight, std=2e-5)
+
+
+
+class VIT_Contrastive(VIT):
+    """
+    Minimal downstream fine-tuning variant:
+    Bird-MAE/VIT multi-label classification + multi-label supervised contrastive loss.
+
+    This does NOT change the Bird-MAE pretraining objective.
+    It only adds a projection head and contrastive auxiliary loss during downstream fine-tuning.
+    """
+    def __init__(
+        self,
+        contrastive_weight=0.1,
+        contrastive_temperature=0.07,
+        contrastive_dim=128,
+        contrastive_hidden_dim=512,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.contrastive_weight = contrastive_weight
+        self.proj_head = ContrastiveProjectionHead(
+            in_dim=self.embed_dim,
+            hidden_dim=contrastive_hidden_dim,
+            out_dim=contrastive_dim,
+        )
+        self.contrastive_loss = MultiLabelSupConLoss(
+            temperature=contrastive_temperature
+        )
+
+    def _extract_features_for_training(self, audio):
+        if self.mask_t_prob > 0.0 or self.mask_f_prob > 0.0:
+            return self.forward_features_mask(audio)
+        return self.forward_features(audio)
+
+    def training_step(self, batch, batch_idx):
+        audio = batch["audio"]
+        targets = batch["label"]
+
+        features = self._extract_features_for_training(audio)
+        pred = self.head(features)
+
+        targets_long = targets.long()
+        try:
+            cls_loss = self.loss(pred, targets_long)
+        except Exception:
+            cls_loss = self.loss(pred, targets.float())
+
+        z = self.proj_head(features)
+        con_loss = self.contrastive_loss(z, targets)
+
+        loss = cls_loss + self.contrastive_weight * con_loss
+
+        self.log('train_cls_loss', cls_loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train_con_loss', con_loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+
+        if self.ema:
+            self.ema.update()
+
+        return loss
+
 
 
 class VIT_ppnet(L.LightningModule,VisionTransformer):
@@ -887,25 +1032,19 @@ class VIT_ppnet(L.LightningModule,VisionTransformer):
         #img_size = (128, self.target_length) # should be correcter, but not pretrained this way
 
         if self.target_length == 512: #esc50, hsn, 5 seconds
-            try:
-                pre_state_dict = torch.load(pretrained_weights_path, map_location="cpu")["model"]
-            except:
-                pre_state_dict = torch.load(pretrained_weights_path, map_location="cpu")["state_dict"]
-
-            # Infer number of patches from checkpoint pos_embed when available.
-            if "pos_embed" in pre_state_dict:
-                num_patches = pre_state_dict["pos_embed"].shape[1] - 1
-            elif "encoder.pos_embed" in pre_state_dict:
-                num_patches = pre_state_dict["encoder.pos_embed"].shape[1] - 1
+            #num_patches = 512 # audioset
+            if "xc" in self.pretrained_weights_path or "XCL" in self.pretrained_weights_path:
+                num_patches = 256 # birdset
             else:
-                if "xc" in self.pretrained_weights_path or "XCL" in self.pretrained_weights_path:
-                    num_patches = 256 # birdset
-                else:
-                    num_patches = 512 # audioset
+                num_patches = 512 # audioset
 
             self.patch_embed = PatchEmbed(img_size, 16, 1, self.embed_dim)
             #self.patch_embed = PatchEmbed_org(img_size, 16, 1, self.embed_dim)
             self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, self.embed_dim), requires_grad=False) #to load pretrained pos embed
+            try:
+                pre_state_dict = torch.load(pretrained_weights_path, map_location="cpu")["model"]
+            except:
+                pre_state_dict = torch.load(pretrained_weights_path, map_location="cpu")["state_dict"]
 
             pretrained_state_dict = {}
 

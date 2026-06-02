@@ -1,6 +1,6 @@
 from .mae.audiomae import AudioMAE
 from .vit.vit import VIT, VIT_ppnet, VIT_MIM
-from .vit.VIT_Constrastive import VIT_Contrastive
+from .vit.VIT_Contrastive import VIT_Contrastive
 from .vit.vit_eat import VIT_EAT
 from .convnext.convnext import ConvNext
 from .birdaves.birdaves import BirdAVES, BirdAVES_ppnet

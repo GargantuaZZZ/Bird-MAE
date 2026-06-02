@@ -16,14 +16,14 @@ defaults:
 
 seed: 1
 start_time: ${now:%Y-%m-%d_%H%M%S}
-task_name: "finetune_hsn_vit_contrastive"
+task_name: "finetune_hsn_${module.network.name}"
 
 train: true
 test: true
 
 logger:
-  experiment_name: full_hsn
-  run_name: birdMAE_hsn_base_vit_contrastive_w01_${seed}_${start_time}
+  experiment_name: full_${data.dataset.name}
+  run_name: birdMAE_hsn_${module.network.name}_w01_${seed}_${start_time}
 
 data:
   loaders:

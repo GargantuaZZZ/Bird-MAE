@@ -37,7 +37,7 @@ class MultiLabelSupConLoss(nn.Module):
         self.temperature = temperature
         self.eps = eps
 
-    def forward(self, features, targets):
+    def forward(self, features, targets, return_stats=False):
         # features: [B, D], targets: [B, C]
         device = features.device
         batch_size = features.size(0)
@@ -51,10 +51,18 @@ class MultiLabelSupConLoss(nn.Module):
         # remove self-comparison
         self_mask = torch.eye(batch_size, dtype=torch.bool, device=device)
         pos_mask = pos_mask & (~self_mask)
+        positive_counts = pos_mask.sum(dim=1)
+        pair_count = max(batch_size * (batch_size - 1), 1)
+        stats = {
+            "positive_pair_ratio": pos_mask.sum().float() / pair_count,
+            "valid_anchor_ratio": (positive_counts > 0).float().mean(),
+            "mean_positives_per_anchor": positive_counts.float().mean(),
+        }
 
         # no positive pair in this batch: return zero loss safely
         if pos_mask.sum() == 0:
-            return features.new_tensor(0.0)
+            loss = features.new_tensor(0.0)
+            return (loss, stats) if return_stats else loss
 
         logits = torch.matmul(features, features.T) / self.temperature
         logits = logits - logits.max(dim=1, keepdim=True).values.detach()
@@ -70,7 +78,7 @@ class MultiLabelSupConLoss(nn.Module):
 
         valid_anchor = pos_mask_float.sum(dim=1) > 0
         loss = -mean_log_prob_pos[valid_anchor].mean()
-        return loss
+        return (loss, stats) if return_stats else loss
 
 
 class ContrastiveProjectionHead(nn.Module):
@@ -639,12 +647,34 @@ class VIT_Contrastive(VIT):
             cls_loss = self.loss(pred, targets.float())
 
         z = self.proj_head(features)
-        con_loss = self.contrastive_loss(z, targets)
+        con_loss, con_stats = self.contrastive_loss(
+            z,
+            targets,
+            return_stats=True,
+        )
 
         loss = cls_loss + self.contrastive_weight * con_loss
 
         self.log('train_cls_loss', cls_loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log('train_con_loss', con_loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log(
+            'train_con_positive_pair_ratio',
+            con_stats["positive_pair_ratio"],
+            on_step=False,
+            on_epoch=True,
+        )
+        self.log(
+            'train_con_valid_anchor_ratio',
+            con_stats["valid_anchor_ratio"],
+            on_step=False,
+            on_epoch=True,
+        )
+        self.log(
+            'train_con_mean_positives',
+            con_stats["mean_positives_per_anchor"],
+            on_step=False,
+            on_epoch=True,
+        )
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
 
         if self.ema:

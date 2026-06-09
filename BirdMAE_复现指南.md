@@ -372,3 +372,13 @@ python util/prepare_data/downstream.py \
     trainer.enable_checkpointing=True \
     data.transform.no_call_mixer=null
 ```
+
+
+**contrastive**
+```bash
+python util/hsn_contrastive_step1_5.py \
+  --vit_npz /data0/zhr21/datasets/BirdSet/contra_npz/base/NES.npz \
+  --supcon_npz /data0/zhr21/datasets/BirdSet/contra_npz/supcon/NES.npz \
+  --annotations_csv /data0/zhr21/datasets/BirdSet/annotations/NES_annotations.csv \
+  --out_dir logs/analysis_nes_vit_vs_contra
+```

@@ -85,3 +85,22 @@ freqm: 0
 mask2d: false
 mask_t_prob: 0.0
 mask_f_prob: 0.0
+
+separation:
+  enabled: false
+  source_root_dir: null
+  original_root_dir: null
+  num_sources: 8
+  source_suffix: "_source{source}"
+  source_extension: ".wav"
+  include_original: false
+  auto_separate: false
+  sound_separation_dir: ../sound-separation
+  model_dir: ../sound-separation/bird_mixit_model_checkpoints/output_sources8
+  process_script: ../sound-separation/models/tools/process_wav.py
+  convert_script: ../sound-separation/scripts/convert_wav_for_model.py
+  python_executable: null
+  convert_input: true
+  converted_input_dirname: "_separation_inputs"
+  lock_timeout: 3600
+  fallback_to_original: false

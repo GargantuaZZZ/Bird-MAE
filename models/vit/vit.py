@@ -508,6 +508,98 @@ class VIT(L.LightningModule,VisionTransformer):
             trunc_normal_(self.head.weight, std=2e-5)
 
 
+class VIT_SourceSeparation(VIT):
+    """VIT classifier wrapper for offline separated source ensembles.
+
+    Standard VIT inputs of shape [B, 1, T, F] are forwarded unchanged. Separated
+    inputs of shape [B, S, 1, T, F] are flattened to [B*S, 1, T, F], classified
+    source-by-source, then aggregated back to [B, num_classes].
+    """
+
+    def __init__(self, *args, source_aggregation="max", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.source_aggregation = source_aggregation
+
+    @staticmethod
+    def _probs_to_logits(probs):
+        eps = torch.finfo(probs.dtype).eps
+        probs = probs.clamp(min=eps, max=1.0 - eps)
+        return torch.logit(probs)
+
+    def aggregate_source_logits(self, source_logits):
+        if self.source_aggregation == "max":
+            return source_logits.max(dim=1).values
+        if self.source_aggregation == "mean_logits":
+            return source_logits.mean(dim=1)
+
+        source_probs = source_logits.sigmoid()
+        if self.source_aggregation == "mean_probs":
+            return self._probs_to_logits(source_probs.mean(dim=1))
+        if self.source_aggregation == "noisy_or":
+            probs = 1.0 - torch.prod(1.0 - source_probs, dim=1)
+            return self._probs_to_logits(probs)
+
+        raise ValueError(f"Invalid source_aggregation: {self.source_aggregation}")
+
+    def forward(self, x):
+        if x.ndim != 5:
+            return super().forward(x)
+
+        batch_size, num_sources = x.shape[:2]
+        flat_sources = x.reshape(batch_size * num_sources, *x.shape[2:])
+        flat_logits = super().forward(flat_sources)
+        source_logits = flat_logits.reshape(batch_size, num_sources, -1)
+        return self.aggregate_source_logits(source_logits)
+
+    def forward_features(self, x):
+        if x.ndim != 5:
+            return super().forward_features(x)
+
+        batch_size, num_sources = x.shape[:2]
+        flat_sources = x.reshape(batch_size * num_sources, *x.shape[2:])
+        flat_features = super().forward_features(flat_sources)
+        return flat_features.reshape(batch_size, num_sources, -1).mean(dim=1)
+
+    def test_step(self, batch, batch_idx):
+        audio = batch["audio"]
+        targets = batch["label"]
+
+        if self.ema:
+            self.ema.apply_shadow()
+
+        self.mask_t_prob = 0.0
+        self.mask_f_prob = 0.0
+
+        pred = self(audio)
+        if audio.ndim == 5:
+            batch_size, num_sources = audio.shape[:2]
+            flat_audio = audio.reshape(batch_size * num_sources, *audio.shape[2:])
+            flat_features = super().forward_features(flat_audio)
+            features = flat_features.reshape(batch_size, num_sources, -1).mean(dim=1)
+        elif self.mask_t_prob > 0.0 or self.mask_f_prob > 0.0:
+            features = super().forward_features_mask(audio)
+        else:
+            features = super().forward_features(audio)
+        self.test_features.append(features.detach().cpu())
+
+        if self.class_mask:
+            pred = pred[:, self.class_mask]
+
+        targets = targets.long()
+        try:
+            loss = self.loss(pred, targets)
+        except:
+            loss = self.loss(pred, targets.float())
+
+        self.test_predictions.append(pred.detach().cpu())
+        self.test_targets.append(targets.detach().cpu())
+
+        self.log('test_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+
+        if self.ema:
+            self.ema.restore()
+
+
 class VIT_ppnet(L.LightningModule,VisionTransformer):
 
     def __init__(self, 

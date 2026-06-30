@@ -8,7 +8,7 @@ import lightning.pytorch as pl
 from lightning.pytorch.utilities.rank_zero import rank_zero_info
 from lightning.pytorch.utilities.types import EVAL_DATALOADERS, TRAIN_DATALOADERS
 import numpy as np 
-from transforms import TrainTransform, EvalTransform, ImageTrainTransform, ImageEvalTransform, BirdSetTrainTransform
+from transforms import TrainTransform, EvalTransform, ImageTrainTransform, ImageEvalTransform, BirdSetTrainTransform, SeparatedEvalTransform
 
 class HFDataModule(pl.LightningDataModule):
     def __init__(
@@ -294,6 +294,26 @@ class BirdSetDataModule(HFDataModule):
             columns = dataset_configs.columns,
             clip_duration = dataset_configs.clip_duration
         )
+
+        if transform_configs.get("separation") and transform_configs.separation.get("enabled", False):
+            self.val_transform = SeparatedEvalTransform(
+                transform_params=transform_configs,
+                sampling_rate=sampling_rate,
+                target_length=dataset_configs.target_length,
+                mean=dataset_configs.mean,
+                std=dataset_configs.std,
+                columns=dataset_configs.columns,
+                clip_duration=dataset_configs.clip_duration,
+            )
+            self.test_transform = SeparatedEvalTransform(
+                transform_params=transform_configs,
+                sampling_rate=sampling_rate,
+                target_length=dataset_configs.target_length,
+                mean=dataset_configs.mean,
+                std=dataset_configs.std,
+                columns=dataset_configs.columns,
+                clip_duration=dataset_configs.clip_duration,
+            )
 
         self.train_loader_configs = loader_configs.train
         self.val_loader_configs = loader_configs.val

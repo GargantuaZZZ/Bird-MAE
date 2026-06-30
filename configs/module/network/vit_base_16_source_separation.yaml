@@ -1,0 +1,30 @@
+name: VIT_SourceSeparation
+norm_layer: nn.LayerNorm
+sampling_rate: 32_000
+img_size_x: ${data.dataset.target_length}
+img_size_y: 128
+patch_size: 16
+in_chans: 1
+embed_dim: 768
+global_pool: True
+mlp_ratio: 4
+qkv_bias: True
+eps: 1e-6
+num_heads: 12
+depth: 12
+drop_path: 0.1
+num_classes: ${data.dataset.num_classes}
+pos_trainable: False
+
+pretrained_weights_path: /data0/zhr21/misc/model_weights/birdmae_base_model.ckpt
+
+target_length: ${data.dataset.target_length}
+mask2d: ${data.transform.mask2d}
+mask_t_prob: ${data.transform.mask_t_prob}
+mask_f_prob: ${data.transform.mask_f_prob}
+freeze_backbone: false
+mask_inference: null
+
+# Options: max, noisy_or, mean_probs, mean_logits.
+source_aggregation: max
+

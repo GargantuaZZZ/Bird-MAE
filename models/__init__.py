@@ -1,5 +1,5 @@
 from .mae.audiomae import AudioMAE
-from .vit.vit import VIT, VIT_ppnet, VIT_MIM
+from .vit.vit import VIT, VIT_SourceSeparation, VIT_ppnet, VIT_MIM
 from .vit.VIT_Contrastive import VIT_Contrastive
 from .vit.vit_eat import VIT_EAT
 from .convnext.convnext import ConvNext

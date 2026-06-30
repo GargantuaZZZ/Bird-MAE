@@ -5,6 +5,11 @@ import torch
 import torchvision
 import torch.nn.functional as F
 import torch_audiomentations
+from pathlib import Path
+import os
+import subprocess
+import sys
+import time
 from birdset.datamodule.components.event_decoding import EventDecoding
 from birdset.datamodule.components.augmentations import  NoCallMixer
 from birdset.datamodule.components.augmentations import PowerToDB
@@ -242,6 +247,273 @@ class TrainTransform(BaseTransform):
 
 class EvalTransform(BaseTransform):
     pass
+
+
+class SeparatedEvalTransform(BaseTransform):
+    """Build model inputs from separated source wavs.
+
+    The transform expects BirdSet-style batches with a filepath column. Source
+    files are resolved by mirroring each original filepath under
+    separation.source_root_dir and adding the suffix written by
+    sound-separation, e.g. original.wav -> original_source0.wav. When
+    separation.auto_separate is enabled, missing source files are generated on
+    demand and cached under source_root_dir.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.separation_params = self.transform_params.separation
+        if not self.separation_params.source_root_dir:
+            raise ValueError("data.transform.separation.source_root_dir must be set")
+        self.source_root_dir = Path(
+            self.separation_params.source_root_dir
+        ).expanduser().resolve()
+        self.original_root_dir = self.separation_params.get("original_root_dir")
+        if self.original_root_dir:
+            self.original_root_dir = Path(self.original_root_dir).expanduser().resolve()
+        self.num_sources = int(self.separation_params.get("num_sources", 8))
+        self.source_suffix = self.separation_params.get("source_suffix", "_source{source}")
+        self.source_extension = self.separation_params.get("source_extension", ".wav")
+        self.include_original = bool(self.separation_params.get("include_original", False))
+        self.fallback_to_original = bool(
+            self.separation_params.get("fallback_to_original", False)
+        )
+        self.auto_separate = bool(self.separation_params.get("auto_separate", False))
+        self.sound_separation_dir = Path(
+            self.separation_params.get("sound_separation_dir", "../sound-separation")
+        ).expanduser().resolve()
+        self.separation_model_dir = Path(
+            self.separation_params.get(
+                "model_dir",
+                self.sound_separation_dir
+                / "bird_mixit_model_checkpoints"
+                / "output_sources8",
+            )
+        ).expanduser().resolve()
+        self.process_script = Path(
+            self.separation_params.get(
+                "process_script", self.sound_separation_dir / "models/tools/process_wav.py"
+            )
+        ).expanduser().resolve()
+        self.convert_script = Path(
+            self.separation_params.get(
+                "convert_script",
+                self.sound_separation_dir / "scripts/convert_wav_for_model.py",
+            )
+        ).expanduser().resolve()
+        self.python_executable = self.separation_params.get(
+            "python_executable", sys.executable
+        ) or sys.executable
+        self.convert_input = bool(self.separation_params.get("convert_input", True))
+        self.converted_input_dirname = self.separation_params.get(
+            "converted_input_dirname", "_separation_inputs"
+        )
+        self.lock_timeout = float(self.separation_params.get("lock_timeout", 3600))
+
+    def _relative_audio_path(self, filepath: str) -> Path:
+        path = Path(filepath)
+        if self.original_root_dir:
+            try:
+                return path.relative_to(self.original_root_dir)
+            except ValueError as exc:
+                raise FileNotFoundError(
+                    f"{path} is not under original_root_dir={self.original_root_dir}"
+                ) from exc
+        return Path(path.name)
+
+    def _source_path(self, filepath: str, source_idx: int) -> Path:
+        relative_path = self._relative_audio_path(filepath)
+        suffix = self.source_suffix.format(source=source_idx)
+        source_name = f"{relative_path.stem}{suffix}{self.source_extension}"
+        return self.source_root_dir / relative_path.parent / source_name
+
+    def _output_base_path(self, filepath: str) -> Path:
+        relative_path = self._relative_audio_path(filepath)
+        return self.source_root_dir / relative_path.parent / f"{relative_path.stem}.wav"
+
+    def _converted_input_path(self, filepath: str) -> Path:
+        relative_path = self._relative_audio_path(filepath)
+        return (
+            self.source_root_dir
+            / self.converted_input_dirname
+            / relative_path.parent
+            / f"{relative_path.stem}.wav"
+        )
+
+    def _run_command(self, command: list[str], cwd: Path | None = None) -> None:
+        result = subprocess.run(
+            command,
+            cwd=str(cwd) if cwd else None,
+            text=True,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            stderr_tail = result.stderr[-4000:]
+            stdout_tail = result.stdout[-1000:]
+            raise RuntimeError(
+                "Command failed while generating separated sources:\n"
+                f"{' '.join(command)}\n"
+                f"stdout:\n{stdout_tail}\n"
+                f"stderr:\n{stderr_tail}"
+            )
+
+    def _acquire_lock(self, lock_path: Path):
+        start_time = time.time()
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        while True:
+            try:
+                fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.close(fd)
+                return
+            except FileExistsError:
+                if time.time() - start_time > self.lock_timeout:
+                    raise TimeoutError(f"Timed out waiting for lock: {lock_path}")
+                time.sleep(2)
+
+    def _release_lock(self, lock_path: Path) -> None:
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            pass
+
+    def _prepare_separator_input(self, filepath: str) -> Path:
+        if not self.convert_input:
+            return Path(filepath)
+
+        converted_input_path = self._converted_input_path(filepath)
+        if converted_input_path.is_file():
+            return converted_input_path
+
+        converted_input_path.parent.mkdir(parents=True, exist_ok=True)
+        command = [
+            str(self.python_executable),
+            str(self.convert_script),
+            str(filepath),
+            str(converted_input_path),
+            "--preset",
+            "bird_mixit",
+        ]
+        self._run_command(command)
+        return converted_input_path
+
+    def _generate_sources(self, filepath: str, expected_paths: list[Path]) -> None:
+        output_base_path = self._output_base_path(filepath)
+        lock_path = output_base_path.with_suffix(output_base_path.suffix + ".lock")
+        self._acquire_lock(lock_path)
+        try:
+            if all(path.is_file() for path in expected_paths):
+                return
+
+            output_base_path.parent.mkdir(parents=True, exist_ok=True)
+            separator_input_path = self._prepare_separator_input(filepath)
+            command = [
+                str(self.python_executable),
+                str(self.process_script),
+                "--input",
+                str(separator_input_path),
+                "--output",
+                str(output_base_path),
+                "--model_dir",
+                str(self.separation_model_dir),
+                "--num_sources",
+                str(self.num_sources),
+                "--write_outputs_separately",
+                "True",
+            ]
+            tools_dir = self.sound_separation_dir / "models/tools"
+            self._run_command(command, cwd=tools_dir)
+        finally:
+            self._release_lock(lock_path)
+
+    def _source_paths_for_sample(self, filepath: str) -> list[str]:
+        paths = [self._source_path(filepath, idx) for idx in range(self.num_sources)]
+        missing_paths = [path for path in paths if not path.is_file()]
+        if missing_paths:
+            if self.auto_separate:
+                self._generate_sources(filepath, paths)
+                missing_paths = [path for path in paths if not path.is_file()]
+
+            if not missing_paths:
+                pass
+            elif not self.fallback_to_original:
+                raise FileNotFoundError(
+                    "Missing separated source files, first missing path: "
+                    f"{missing_paths[0]}"
+                )
+            else:
+                paths = [Path(filepath)] * self.num_sources
+
+        if self.include_original:
+            paths.append(Path(filepath))
+        return [str(path) for path in paths]
+
+    def __call__(self, batch):
+        source_filepaths = []
+        source_labels = []
+        source_detected_events = []
+        source_start_times = []
+        source_end_times = []
+
+        for sample_idx, filepath in enumerate(batch[self.columns[0]]):
+            sample_source_paths = self._source_paths_for_sample(filepath)
+            source_filepaths.extend(sample_source_paths)
+            source_labels.extend([batch[self.columns[1]][sample_idx]] * len(sample_source_paths))
+
+            if "detected_events" in batch:
+                source_detected_events.extend(
+                    [batch["detected_events"][sample_idx]] * len(sample_source_paths)
+                )
+            if "start_time" in batch:
+                source_start_times.extend(
+                    [batch["start_time"][sample_idx]] * len(sample_source_paths)
+                )
+            if "end_time" in batch:
+                source_end_times.extend(
+                    [batch["end_time"][sample_idx]] * len(sample_source_paths)
+                )
+
+        source_batch = {
+            "filepath": source_filepaths,
+            self.columns[1]: source_labels,
+        }
+        if source_detected_events:
+            source_batch["detected_events"] = source_detected_events
+        if source_start_times:
+            source_batch["start_time"] = source_start_times
+        if source_end_times:
+            source_batch["end_time"] = source_end_times
+
+        source_batch = self.event_decoder(source_batch)
+        waveforms = [audio["array"] for audio in source_batch["audio"]]
+        waveform_batch = self._process_waveforms(waveforms)
+
+        if self.input_params.type == "birdset":
+            fbank_features = self._compute_birdset_features(waveform_batch["input_values"])
+        elif self.input_params.type == "fbank":
+            fbank_features = self._compute_fbank_features(waveform_batch["input_values"])
+        elif self.input_params.type == "audio":
+            audio = waveform_batch["input_values"]
+            sources_per_sample = self.num_sources + int(self.include_original)
+            audio = audio.reshape(len(batch[self.columns[0]]), sources_per_sample, -1)
+            return {
+                "audio": audio,
+                "label": torch.Tensor(batch[self.columns[1]]),
+            }
+        else:
+            raise ValueError(f"Invalid input type: {self.input_params.type}")
+
+        fbank_features = self._pad_and_normalize(fbank_features)
+        fbank_features = (fbank_features - self.mean) / (self.std * 2)
+
+        sources_per_sample = self.num_sources + int(self.include_original)
+        fbank_features = fbank_features.reshape(
+            len(batch[self.columns[0]]), sources_per_sample, *fbank_features.shape[1:]
+        )
+
+        return {
+            "audio": fbank_features.unsqueeze(2),
+            "label": torch.Tensor(batch[self.columns[1]]),
+        }
 
 class DefaultFeatureExtractor(SequenceFeatureExtractor):
     """

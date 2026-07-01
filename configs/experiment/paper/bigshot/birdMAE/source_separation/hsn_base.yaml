@@ -22,11 +22,11 @@ test: true
 
 # Override this with the fine-tuned Bird-MAE checkpoint used for the raw
 # baseline, otherwise the classification head is not meaningful.
-ckpt_path: null
+ckpt_path: /data0/zhr21/GitHub_repo/Bird-MAE/logs/finetune_hsn/runs/HSN/VIT_ppnet/2026-06-02_113934/callback_checkpoints/last.ckpt
 
 logger:
   experiment_name: full_hsn
-  run_name: birdMAE_hsn_base_source_separation_${module.network.source_aggregation}_${seed}_${start_time}
+  run_name: birdMAE_hsn_base_ppnet_source_separation_${module.network.source_aggregation}_${seed}_${start_time}
 
 data:
   loaders:
@@ -44,13 +44,13 @@ data:
       batch_size: 16
       shuffle: false
   dataset:
-    save_to_disk: /scratch/birdset/HSN/HSN_processed_42_af8bbf517e45e99d_d9dd5751bb728754_c3aa30664ea8e4a0
+    save_to_disk: /data0/zhr21/datasets/BirdSet/processed/HSN
   transform:
     separation:
       enabled: true
       # Automatic separation cache. Missing source wavs are generated here on
       # demand from the original BirdSet filepath.
-      source_root_dir: /path/to/HSN_separated
+      source_root_dir: /data0/zhr21/datasets/BirdSet/separated/HSN/bird_mixit_output_sources8
       # Set this when source_root_dir mirrors paths relative to the raw audio
       # root. Leave null when source_root_dir is flat by basename.
       original_root_dir: null
@@ -59,11 +59,11 @@ data:
       source_extension: ".wav"
       include_original: false
       auto_separate: true
-      sound_separation_dir: ../sound-separation
-      model_dir: ../sound-separation/bird_mixit_model_checkpoints/output_sources8
-      process_script: ../sound-separation/models/tools/process_wav.py
-      convert_script: ../sound-separation/scripts/convert_wav_for_model.py
-      python_executable: null
+      sound_separation_dir: /data0/zhr21/GitHub_repo/sound-separation
+      model_dir: /data0/zhr21/GitHub_repo/sound-separation/bird_mixit_model_checkpoints/output_sources8
+      process_script: /data0/zhr21/GitHub_repo/sound-separation/models/tools/process_wav.py
+      convert_script: /data0/zhr21/GitHub_repo/sound-separation/scripts/convert_wav_for_model.py
+      python_executable: /home/zhr21/anaconda3/envs/birdmae/bin/python
       convert_input: true
       converted_input_dirname: "_separation_inputs"
       lock_timeout: 3600
@@ -78,3 +78,6 @@ module:
     ema_update_rate: null
     freeze_backbone: true
     source_aggregation: max
+    ppnet:
+      num_prototypes: 20
+      last_layer_lr: 3e-4

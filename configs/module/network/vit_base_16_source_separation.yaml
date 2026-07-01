@@ -1,4 +1,4 @@
-name: VIT_SourceSeparation
+name: VIT_ppnet_SourceSeparation
 norm_layer: nn.LayerNorm
 sampling_rate: 32_000
 img_size_x: ${data.dataset.target_length}
@@ -28,3 +28,21 @@ mask_inference: null
 # Options: max, noisy_or, mean_probs, mean_logits.
 source_aggregation: max
 
+ppnet:
+  num_prototypes: 420
+  channels_prototypes: 768
+  h_prototypes: 1
+  w_prototypes: 1
+  num_classes: ${data.dataset.num_classes}
+  topk_k: 1
+  margin: null
+  init_weights: true
+  add_on_layers_type: upsample
+  incorrect_class_connection: null
+  correct_class_connection: 1.0
+  bias_last_layer: -2.0
+  non_negative_last_layer: true
+  embedded_spectrogram_height: null
+  last_layer_lr: 4e-4
+  prototype_lr: 0.04
+  focal_similarity: true

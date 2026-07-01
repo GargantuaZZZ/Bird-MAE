@@ -1152,6 +1152,64 @@ class VIT_ppnet(L.LightningModule,VisionTransformer):
         return normalized_orthogonality_loss
     
 
+class VIT_ppnet_SourceSeparation(VIT_ppnet):
+    """PPNet classifier wrapper for offline separated source ensembles.
+
+    Standard PPNet inputs of shape [B, 1, T, F] are forwarded unchanged.
+    Separated inputs of shape [B, S, 1, T, F] are classified source-by-source
+    with the same PPNet head, then source logits are aggregated to [B, C].
+    """
+
+    def __init__(self, *args, source_aggregation="max", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.source_aggregation = source_aggregation
+
+    @staticmethod
+    def _probs_to_logits(probs):
+        eps = torch.finfo(probs.dtype).eps
+        probs = probs.clamp(min=eps, max=1.0 - eps)
+        return torch.logit(probs)
+
+    def aggregate_source_logits(self, source_logits):
+        if self.source_aggregation == "max":
+            return source_logits.max(dim=1).values
+        if self.source_aggregation == "mean_logits":
+            return source_logits.mean(dim=1)
+
+        source_probs = source_logits.sigmoid()
+        if self.source_aggregation == "mean_probs":
+            return self._probs_to_logits(source_probs.mean(dim=1))
+        if self.source_aggregation == "noisy_or":
+            probs = 1.0 - torch.prod(1.0 - source_probs, dim=1)
+            return self._probs_to_logits(probs)
+
+        raise ValueError(f"Invalid source_aggregation: {self.source_aggregation}")
+
+    def forward_features(self, x, return_features=False):
+        if x.ndim != 5:
+            return super().forward_features(x, return_features=return_features)
+
+        batch_size, num_sources = x.shape[:2]
+        flat_sources = x.reshape(batch_size * num_sources, *x.shape[2:])
+        flat_logits, flat_features = super().forward_features(
+            flat_sources, return_features=True
+        )
+        source_logits = flat_logits.reshape(batch_size, num_sources, -1)
+        logits = self.aggregate_source_logits(source_logits)
+
+        source_features = flat_features.reshape(
+            batch_size, num_sources, *flat_features.shape[1:]
+        )
+        features = source_features.mean(dim=1)
+
+        if return_features:
+            return logits, features
+        return logits
+
+    def forward(self, x):
+        return self.forward_features(x)
+
+
 class VIT_MIM(L.LightningModule):
 
     def __init__(self, 

@@ -341,9 +341,15 @@ class SeparatedEvalTransform(BaseTransform):
         )
 
     def _run_command(self, command: list[str], cwd: Path | None = None) -> None:
+        env = os.environ.copy()
+        env.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+        env.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
+        env.setdefault("MPLCONFIGDIR", "/data0/zhr21/.cache/matplotlib")
+        env.setdefault("XDG_CACHE_HOME", "/data0/zhr21/.cache")
         result = subprocess.run(
             command,
             cwd=str(cwd) if cwd else None,
+            env=env,
             text=True,
             capture_output=True,
         )

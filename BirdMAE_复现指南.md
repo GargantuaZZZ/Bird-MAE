@@ -352,7 +352,7 @@ HSN 被用作开发集（validation set），所有超参数在 HSN 上调优后
 
 ## 复现命令
 
-**准备数据**
+### 准备数据
 ```bash
 python util/prepare_data/downstream.py \
   --dataset-names HSN \
@@ -364,9 +364,9 @@ python util/prepare_data/downstream.py \
   --n-workers 1
 ```
 
-**finetune**
+### finetune
 ```bash
- CUDA_VISIBLE_DEVICES=0 python finetune.py \
+CUDA_VISIBLE_DEVICES=0 python finetune.py \
     data.transform.waveform_augmentations=null \
     experiment=paper/bigshot/birdMAE/frozenpp/hsn_large_ppnet.yaml \
     trainer.enable_checkpointing=True \
@@ -374,11 +374,41 @@ python util/prepare_data/downstream.py \
 ```
 
 
-**contrastive**
+### contrastive
 ```bash
 python util/hsn_contrastive_step1_5.py \
   --vit_npz /data0/zhr21/datasets/BirdSet/contra_npz/base/NES.npz \
   --supcon_npz /data0/zhr21/datasets/BirdSet/contra_npz/supcon/NES.npz \
   --annotations_csv /data0/zhr21/datasets/BirdSet/annotations/NES_annotations.csv \
   --out_dir logs/analysis_nes_vit_vs_contra
+```
+
+### sound_separation
+
+```bash
+PPNET_CKPT=/data0/zhr21/GitHub_repo/Bird-MAE/logs/finetune_hsn/runs/HSN/VIT_ppnet/2026-06-02_113934/callback_checkpoints/last.ckpt
+```
+
+#### raw_ppnet
+```bash
+CUDA_VISIBLE_DEVICES=4 python finetune.py \
+  experiment=paper/bigshot/birdMAE/base/hsn_base_ppnet \
+  train=false \
+  test=true \
+  ckpt_path="$PPNET_CKPT" \
+  logger.run_name=raw_ppnet_hsn_eval \
+  trainer.enable_checkpointing=True \
+  data.transform.waveform_augmentations=null \
+  data.transform.no_call_mixer=null
+```
+
+#### source_sep
+```bash
+CUDA_VISIBLE_DEVICES=5 python finetune.py \
+  experiment=paper/bigshot/birdMAE/source_separation/hsn_base \
+  ckpt_path="$PPNET_CKPT" \
+  logger.run_name=sep_ppnet_hsn_eval_max \
+  trainer.enable_checkpointing=True \
+  data.transform.waveform_augmentations=null \
+  data.transform.no_call_mixer=null
 ```

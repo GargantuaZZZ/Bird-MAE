@@ -95,11 +95,11 @@ separation:
   source_extension: ".wav"
   include_original: false
   auto_separate: false
-  sound_separation_dir: ../sound-separation
-  model_dir: ../sound-separation/bird_mixit_model_checkpoints/output_sources8
-  process_script: ../sound-separation/models/tools/process_wav.py
-  convert_script: ../sound-separation/scripts/convert_wav_for_model.py
-  python_executable: null
+  sound_separation_dir: /data0/zhr21/GitHub_repo/sound-separation
+  model_dir: /data0/zhr21/GitHub_repo/sound-separation/bird_mixit_model_checkpoints/output_sources8
+  process_script: /data0/zhr21/GitHub_repo/sound-separation/models/tools/process_wav.py
+  convert_script: /data0/zhr21/GitHub_repo/sound-separation/scripts/convert_wav_for_model.py
+  python_executable: /home/zhr21/anaconda3/envs/birdmae/bin/python
   convert_input: true
   converted_input_dirname: "_separation_inputs"
   lock_timeout: 3600

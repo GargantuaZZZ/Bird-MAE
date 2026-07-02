@@ -1,4 +1,11 @@
-import os 
+import os
+
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
+os.environ.setdefault("TF_ENABLE_TENSORRT", "0")
+os.environ.setdefault("MPLCONFIGDIR", "/data0/zhr21/.cache/matplotlib")
+os.environ.setdefault("XDG_CACHE_HOME", "/data0/zhr21/.cache")
+
 import hydra 
 import torch
 import lightning as L
@@ -136,4 +143,3 @@ if __name__ == "__main__":
 
 
     
-

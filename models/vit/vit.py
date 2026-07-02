@@ -516,9 +516,10 @@ class VIT_SourceSeparation(VIT):
     source-by-source, then aggregated back to [B, num_classes].
     """
 
-    def __init__(self, *args, source_aggregation="max", **kwargs):
+    def __init__(self, *args, source_aggregation="max", source_top_k=2, **kwargs):
         super().__init__(*args, **kwargs)
         self.source_aggregation = source_aggregation
+        self.source_top_k = source_top_k
 
     @staticmethod
     def _probs_to_logits(probs):
@@ -531,10 +532,17 @@ class VIT_SourceSeparation(VIT):
             return source_logits.max(dim=1).values
         if self.source_aggregation == "mean_logits":
             return source_logits.mean(dim=1)
+        if self.source_aggregation == "topk_mean_logits":
+            k = min(int(self.source_top_k), source_logits.shape[1])
+            return source_logits.topk(k, dim=1).values.mean(dim=1)
 
         source_probs = source_logits.sigmoid()
         if self.source_aggregation == "mean_probs":
             return self._probs_to_logits(source_probs.mean(dim=1))
+        if self.source_aggregation == "topk_mean_probs":
+            k = min(int(self.source_top_k), source_probs.shape[1])
+            probs = source_probs.topk(k, dim=1).values.mean(dim=1)
+            return self._probs_to_logits(probs)
         if self.source_aggregation == "noisy_or":
             probs = 1.0 - torch.prod(1.0 - source_probs, dim=1)
             return self._probs_to_logits(probs)
@@ -1160,9 +1168,10 @@ class VIT_ppnet_SourceSeparation(VIT_ppnet):
     with the same PPNet head, then source logits are aggregated to [B, C].
     """
 
-    def __init__(self, *args, source_aggregation="max", **kwargs):
+    def __init__(self, *args, source_aggregation="max", source_top_k=2, **kwargs):
         super().__init__(*args, **kwargs)
         self.source_aggregation = source_aggregation
+        self.source_top_k = source_top_k
 
     @staticmethod
     def _probs_to_logits(probs):
@@ -1175,10 +1184,17 @@ class VIT_ppnet_SourceSeparation(VIT_ppnet):
             return source_logits.max(dim=1).values
         if self.source_aggregation == "mean_logits":
             return source_logits.mean(dim=1)
+        if self.source_aggregation == "topk_mean_logits":
+            k = min(int(self.source_top_k), source_logits.shape[1])
+            return source_logits.topk(k, dim=1).values.mean(dim=1)
 
         source_probs = source_logits.sigmoid()
         if self.source_aggregation == "mean_probs":
             return self._probs_to_logits(source_probs.mean(dim=1))
+        if self.source_aggregation == "topk_mean_probs":
+            k = min(int(self.source_top_k), source_probs.shape[1])
+            probs = source_probs.topk(k, dim=1).values.mean(dim=1)
+            return self._probs_to_logits(probs)
         if self.source_aggregation == "noisy_or":
             probs = 1.0 - torch.prod(1.0 - source_probs, dim=1)
             return self._probs_to_logits(probs)

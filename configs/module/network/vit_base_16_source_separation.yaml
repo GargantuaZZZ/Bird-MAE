@@ -26,9 +26,11 @@ freeze_backbone: false
 mask_inference: null
 
 # Options: max, noisy_or, mean_probs, mean_logits, topk_mean_probs,
-# topk_mean_logits.
+# topk_mean_logits, hybrid_max_mean_probs, hybrid_max_mean_logits,
+# hybrid_max_topk_mean_probs, hybrid_max_topk_mean_logits.
 source_aggregation: max
 source_top_k: 2
+source_max_weight: 0.7
 
 ppnet:
   num_prototypes: 420

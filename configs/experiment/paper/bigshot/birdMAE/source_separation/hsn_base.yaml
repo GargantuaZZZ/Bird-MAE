@@ -79,6 +79,7 @@ module:
     freeze_backbone: true
     source_aggregation: max
     source_top_k: 2
+    source_max_weight: 0.7
     ppnet:
       num_prototypes: 20
       last_layer_lr: 3e-4

@@ -122,6 +122,8 @@ def build_model(cfg_module: DictConfig):
             ema_update_rate=cfg_module.network.ema_update_rate,
             mask_inference=cfg_module.network.mask_inference,
             source_aggregation=cfg_module.network.source_aggregation,
+            source_top_k=cfg_module.network.source_top_k,
+            source_max_weight=cfg_module.network.source_max_weight,
         )
 
     elif cfg_module.network.name == "VIT_ppnet":
@@ -184,6 +186,7 @@ def build_model(cfg_module: DictConfig):
             mask_inference=cfg_module.network.mask_inference,
             source_aggregation=cfg_module.network.source_aggregation,
             source_top_k=cfg_module.network.source_top_k,
+            source_max_weight=cfg_module.network.source_max_weight,
         )
 
     elif cfg_module.network.name == "VIT_MIM":

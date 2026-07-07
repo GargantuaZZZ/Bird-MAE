@@ -516,10 +516,18 @@ class VIT_SourceSeparation(VIT):
     source-by-source, then aggregated back to [B, num_classes].
     """
 
-    def __init__(self, *args, source_aggregation="max", source_top_k=2, **kwargs):
+    def __init__(
+        self,
+        *args,
+        source_aggregation="max",
+        source_top_k=2,
+        source_max_weight=0.7,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.source_aggregation = source_aggregation
         self.source_top_k = source_top_k
+        self.source_max_weight = source_max_weight
 
     @staticmethod
     def _probs_to_logits(probs):
@@ -535,6 +543,17 @@ class VIT_SourceSeparation(VIT):
         if self.source_aggregation == "topk_mean_logits":
             k = min(int(self.source_top_k), source_logits.shape[1])
             return source_logits.topk(k, dim=1).values.mean(dim=1)
+        if self.source_aggregation == "hybrid_max_mean_logits":
+            weight = float(self.source_max_weight)
+            max_logits = source_logits.max(dim=1).values
+            mean_logits = source_logits.mean(dim=1)
+            return weight * max_logits + (1.0 - weight) * mean_logits
+        if self.source_aggregation == "hybrid_max_topk_mean_logits":
+            weight = float(self.source_max_weight)
+            k = min(int(self.source_top_k), source_logits.shape[1])
+            max_logits = source_logits.max(dim=1).values
+            topk_mean_logits = source_logits.topk(k, dim=1).values.mean(dim=1)
+            return weight * max_logits + (1.0 - weight) * topk_mean_logits
 
         source_probs = source_logits.sigmoid()
         if self.source_aggregation == "mean_probs":
@@ -542,6 +561,19 @@ class VIT_SourceSeparation(VIT):
         if self.source_aggregation == "topk_mean_probs":
             k = min(int(self.source_top_k), source_probs.shape[1])
             probs = source_probs.topk(k, dim=1).values.mean(dim=1)
+            return self._probs_to_logits(probs)
+        if self.source_aggregation == "hybrid_max_mean_probs":
+            weight = float(self.source_max_weight)
+            max_probs = source_probs.max(dim=1).values
+            mean_probs = source_probs.mean(dim=1)
+            probs = weight * max_probs + (1.0 - weight) * mean_probs
+            return self._probs_to_logits(probs)
+        if self.source_aggregation == "hybrid_max_topk_mean_probs":
+            weight = float(self.source_max_weight)
+            k = min(int(self.source_top_k), source_probs.shape[1])
+            max_probs = source_probs.max(dim=1).values
+            topk_mean_probs = source_probs.topk(k, dim=1).values.mean(dim=1)
+            probs = weight * max_probs + (1.0 - weight) * topk_mean_probs
             return self._probs_to_logits(probs)
         if self.source_aggregation == "noisy_or":
             probs = 1.0 - torch.prod(1.0 - source_probs, dim=1)
@@ -1168,10 +1200,18 @@ class VIT_ppnet_SourceSeparation(VIT_ppnet):
     with the same PPNet head, then source logits are aggregated to [B, C].
     """
 
-    def __init__(self, *args, source_aggregation="max", source_top_k=2, **kwargs):
+    def __init__(
+        self,
+        *args,
+        source_aggregation="max",
+        source_top_k=2,
+        source_max_weight=0.7,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.source_aggregation = source_aggregation
         self.source_top_k = source_top_k
+        self.source_max_weight = source_max_weight
 
     @staticmethod
     def _probs_to_logits(probs):
@@ -1187,6 +1227,17 @@ class VIT_ppnet_SourceSeparation(VIT_ppnet):
         if self.source_aggregation == "topk_mean_logits":
             k = min(int(self.source_top_k), source_logits.shape[1])
             return source_logits.topk(k, dim=1).values.mean(dim=1)
+        if self.source_aggregation == "hybrid_max_mean_logits":
+            weight = float(self.source_max_weight)
+            max_logits = source_logits.max(dim=1).values
+            mean_logits = source_logits.mean(dim=1)
+            return weight * max_logits + (1.0 - weight) * mean_logits
+        if self.source_aggregation == "hybrid_max_topk_mean_logits":
+            weight = float(self.source_max_weight)
+            k = min(int(self.source_top_k), source_logits.shape[1])
+            max_logits = source_logits.max(dim=1).values
+            topk_mean_logits = source_logits.topk(k, dim=1).values.mean(dim=1)
+            return weight * max_logits + (1.0 - weight) * topk_mean_logits
 
         source_probs = source_logits.sigmoid()
         if self.source_aggregation == "mean_probs":
@@ -1194,6 +1245,19 @@ class VIT_ppnet_SourceSeparation(VIT_ppnet):
         if self.source_aggregation == "topk_mean_probs":
             k = min(int(self.source_top_k), source_probs.shape[1])
             probs = source_probs.topk(k, dim=1).values.mean(dim=1)
+            return self._probs_to_logits(probs)
+        if self.source_aggregation == "hybrid_max_mean_probs":
+            weight = float(self.source_max_weight)
+            max_probs = source_probs.max(dim=1).values
+            mean_probs = source_probs.mean(dim=1)
+            probs = weight * max_probs + (1.0 - weight) * mean_probs
+            return self._probs_to_logits(probs)
+        if self.source_aggregation == "hybrid_max_topk_mean_probs":
+            weight = float(self.source_max_weight)
+            k = min(int(self.source_top_k), source_probs.shape[1])
+            max_probs = source_probs.max(dim=1).values
+            topk_mean_probs = source_probs.topk(k, dim=1).values.mean(dim=1)
+            probs = weight * max_probs + (1.0 - weight) * topk_mean_probs
             return self._probs_to_logits(probs)
         if self.source_aggregation == "noisy_or":
             probs = 1.0 - torch.prod(1.0 - source_probs, dim=1)

@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import torch_audiomentations
 from pathlib import Path
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -309,6 +310,13 @@ class SeparatedEvalTransform(BaseTransform):
             "converted_input_dirname", "_separation_inputs"
         )
         self.lock_timeout = float(self.separation_params.get("lock_timeout", 3600))
+        self.command_timeout = float(self.separation_params.get("command_timeout", 1800))
+        self.convert_timeout = float(
+            self.separation_params.get("convert_timeout", self.command_timeout)
+        )
+        self.process_timeout = float(
+            self.separation_params.get("process_timeout", self.command_timeout)
+        )
 
     def _relative_audio_path(self, filepath: str) -> Path:
         path = Path(filepath)
@@ -340,22 +348,51 @@ class SeparatedEvalTransform(BaseTransform):
             / f"{relative_path.stem}.wav"
         )
 
-    def _run_command(self, command: list[str], cwd: Path | None = None) -> None:
+    def _failed_marker_path(self, filepath: str) -> Path:
+        return self._output_base_path(filepath).with_suffix(".wav.failed")
+
+    def _run_command(
+        self,
+        command: list[str],
+        cwd: Path | None = None,
+        timeout: float | None = None,
+    ) -> None:
         env = os.environ.copy()
         env.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
         env.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
         env.setdefault("MPLCONFIGDIR", "/data0/zhr21/.cache/matplotlib")
         env.setdefault("XDG_CACHE_HOME", "/data0/zhr21/.cache")
-        result = subprocess.run(
+        process = subprocess.Popen(
             command,
             cwd=str(cwd) if cwd else None,
             env=env,
             text=True,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
         )
-        if result.returncode != 0:
-            stderr_tail = result.stderr[-4000:]
-            stdout_tail = result.stdout[-1000:]
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+                stdout, stderr = process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                stdout, stderr = process.communicate()
+            stderr_tail = (stderr or "")[-4000:]
+            stdout_tail = (stdout or "")[-1000:]
+            raise TimeoutError(
+                "Command timed out while generating separated sources "
+                f"after {timeout:.0f}s:\n"
+                f"{' '.join(command)}\n"
+                f"stdout:\n{stdout_tail}\n"
+                f"stderr:\n{stderr_tail}"
+            ) from exc
+
+        if process.returncode != 0:
+            stderr_tail = (stderr or "")[-4000:]
+            stdout_tail = (stdout or "")[-1000:]
             raise RuntimeError(
                 "Command failed while generating separated sources:\n"
                 f"{' '.join(command)}\n"
@@ -399,15 +436,27 @@ class SeparatedEvalTransform(BaseTransform):
             "--preset",
             "bird_mixit",
         ]
-        self._run_command(command)
+        try:
+            self._run_command(command, timeout=self.convert_timeout)
+        except Exception:
+            try:
+                converted_input_path.unlink()
+            except FileNotFoundError:
+                pass
+            raise
         return converted_input_path
 
     def _generate_sources(self, filepath: str, expected_paths: list[Path]) -> None:
         output_base_path = self._output_base_path(filepath)
         lock_path = output_base_path.with_suffix(output_base_path.suffix + ".lock")
+        failed_marker_path = self._failed_marker_path(filepath)
         self._acquire_lock(lock_path)
         try:
             if all(path.is_file() for path in expected_paths):
+                try:
+                    failed_marker_path.unlink()
+                except FileNotFoundError:
+                    pass
                 return
 
             output_base_path.parent.mkdir(parents=True, exist_ok=True)
@@ -427,7 +476,20 @@ class SeparatedEvalTransform(BaseTransform):
                 "True",
             ]
             tools_dir = self.sound_separation_dir / "models/tools"
-            self._run_command(command, cwd=tools_dir)
+            self._run_command(command, cwd=tools_dir, timeout=self.process_timeout)
+            if all(path.is_file() for path in expected_paths):
+                try:
+                    failed_marker_path.unlink()
+                except FileNotFoundError:
+                    pass
+        except Exception as exc:
+            failed_marker_path.parent.mkdir(parents=True, exist_ok=True)
+            failed_marker_path.write_text(
+                f"filepath: {filepath}\n"
+                f"error: {type(exc).__name__}: {exc}\n",
+                encoding="utf-8",
+            )
+            raise
         finally:
             self._release_lock(lock_path)
 
@@ -435,8 +497,17 @@ class SeparatedEvalTransform(BaseTransform):
         paths = [self._source_path(filepath, idx) for idx in range(self.num_sources)]
         missing_paths = [path for path in paths if not path.is_file()]
         if missing_paths:
-            if self.auto_separate:
-                self._generate_sources(filepath, paths)
+            failed_marker_path = self._failed_marker_path(filepath)
+            if self.auto_separate and not failed_marker_path.is_file():
+                try:
+                    self._generate_sources(filepath, paths)
+                except Exception as exc:
+                    if not self.fallback_to_original:
+                        raise
+                    logger.warning(
+                        "Falling back to original audio after source separation "
+                        f"failed for {filepath}: {type(exc).__name__}: {exc}"
+                    )
                 missing_paths = [path for path in paths if not path.is_file()]
 
             if not missing_paths:

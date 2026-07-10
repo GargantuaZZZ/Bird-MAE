@@ -80,13 +80,22 @@ def finetune(cfg: DictConfig):
         log.info(f"Load pretrained weights from {pretrained_weights_path}")
         model.load_pretrained_weights(pretrained_weights_path, cfg.data.dataset.name)
 
+    init_ckpt_path = cfg.get("init_ckpt_path", None)
+    if init_ckpt_path not in (None, "", "none", "null"):
+        log.info(f"Initialize model weights from checkpoint: {init_ckpt_path}")
+        checkpoint = torch.load(init_ckpt_path, map_location="cpu")
+        state_dict = checkpoint.get("state_dict", checkpoint)
+        info = model.load_state_dict(state_dict, strict=False)
+        log.info(f"Loaded init checkpoint with missing keys: {info.missing_keys}")
+        log.info(f"Loaded init checkpoint with unexpected keys: {info.unexpected_keys}")
+
     if cfg.module.network.get("freeze_backbone", False): # move this to the models!
         log.info("Freezing backbone weights, only training head")
         if cfg.module.network.name == "ConvNext":
              for name, param in model.named_parameters():
                 if 'classifier' not in name:
                     param.requires_grad = False
-        elif cfg.module.network.name == "VIT_ppnet" or cfg.module.network.name.endswith("ppnet"):
+        elif "ppnet" in cfg.module.network.name.lower():
             for name, param in model.named_parameters():
                 if 'ppnet' not in name:
                     param.requires_grad = False

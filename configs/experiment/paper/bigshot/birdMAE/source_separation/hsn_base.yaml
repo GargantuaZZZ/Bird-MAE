@@ -67,11 +67,15 @@ data:
       convert_input: true
       converted_input_dirname: "_separation_inputs"
       lock_timeout: 3600
-      fallback_to_original: false
+      command_timeout: 1800
+      convert_timeout: 300
+      process_timeout: 1800
+      fallback_to_original: true
 
 trainer:
   precision: 16-mixed
   num_sanity_val_steps: 0
+  enable_checkpointing: true
 
 module:
   network:

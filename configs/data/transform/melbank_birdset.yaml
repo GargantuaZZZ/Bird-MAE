@@ -103,4 +103,7 @@ separation:
   convert_input: true
   converted_input_dirname: "_separation_inputs"
   lock_timeout: 3600
+  command_timeout: 1800
+  convert_timeout: 300
+  process_timeout: 1800
   fallback_to_original: false

@@ -296,6 +296,15 @@ class BirdSetDataModule(HFDataModule):
         )
 
         if transform_configs.get("separation") and transform_configs.separation.get("enabled", False):
+            self.train_transform = SeparatedEvalTransform(
+                transform_params=transform_configs,
+                sampling_rate=sampling_rate,
+                target_length=dataset_configs.target_length,
+                mean=dataset_configs.mean,
+                std=dataset_configs.std,
+                columns=dataset_configs.columns,
+                clip_duration=dataset_configs.clip_duration,
+            )
             self.val_transform = SeparatedEvalTransform(
                 transform_params=transform_configs,
                 sampling_rate=sampling_rate,

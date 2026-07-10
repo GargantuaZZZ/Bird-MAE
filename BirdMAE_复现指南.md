@@ -387,6 +387,7 @@ python util/hsn_contrastive_step1_5.py \
 
 ```bash
 PPNET_CKPT=/data0/zhr21/GitHub_repo/Bird-MAE/logs/finetune_hsn/runs/HSN/VIT_ppnet/2026-06-02_113934/callback_checkpoints/last.ckpt
+RETRAINED_CKPT=/data0/zhr21/GitHub_repo/Bird-MAE/logs/test_hsn_source_separation/runs/HSN/VIT_ppnet_SourceSeparation/2026-07-08_134724/callback_checkpoints/last.ckpt
 ```
 
 #### raw_ppnet
@@ -406,9 +407,39 @@ CUDA_VISIBLE_DEVICES=4 python finetune.py \
 ```bash
 CUDA_VISIBLE_DEVICES=5 python finetune.py \
   experiment=paper/bigshot/birdMAE/source_separation/hsn_base \
-  ckpt_path="$PPNET_CKPT" \
-  logger.run_name=sep_ppnet_hsn_eval_max \
-  trainer.enable_checkpointing=True \
+  train=false \
+  test=true \
+  ckpt_path="$RETRAINED_CKPT" \
+  module.network.source_aggregation=hybrid_max_topk_mean_logits \
+  module.network.source_top_k=2 \
+  module.network.source_max_weight=0.5 \
+  logger.run_name=sep_ppnet_hsn_include_raw_hybrid_max_top2_logits_w05 \
   data.transform.waveform_augmentations=null \
   data.transform.no_call_mixer=null
+```
+
+#### train classifier
+```bash
+CUDA_VISIBLE_DEVICES=5 python finetune.py \
+  experiment=paper/bigshot/birdMAE/source_separation/hsn_base \
+  train=true \
+  test=true \
+  +init_ckpt_path="$PPNET_CKPT" \
+  ckpt_path=last \
+  module.network.source_aggregation=hybrid_max_topk_mean_logits \
+  module.network.source_top_k=2 \
+  module.network.source_max_weight=0.5 \
+  module.network.freeze_backbone=true \
+  trainer.max_epochs=10 \
+  trainer.enable_checkpointing=True \
+  trainer.check_val_every_n_epoch=1 \
+  data.loaders.train.batch_size=8 \
+  data.loaders.val.batch_size=8 \
+  data.loaders.test.batch_size=8 \
+  data.loaders.train.num_workers=2 \
+  data.loaders.val.num_workers=2 \
+  data.loaders.test.num_workers=2 \
+  data.transform.waveform_augmentations=null \
+  data.transform.no_call_mixer=null \
+  logger.run_name=sep_ppnet_hsn_train_cls_top2_hybrid_w05
 ```

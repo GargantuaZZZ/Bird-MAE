@@ -124,6 +124,11 @@ def build_model(cfg_module: DictConfig):
             source_aggregation=cfg_module.network.source_aggregation,
             source_top_k=cfg_module.network.source_top_k,
             source_max_weight=cfg_module.network.source_max_weight,
+            source_attention_hidden_dim=cfg_module.network.get("source_attention_hidden_dim", 64),
+            source_attention_dropout=cfg_module.network.get("source_attention_dropout", 0.0),
+            source_attention_classwise=cfg_module.network.get("source_attention_classwise", True),
+            source_gate_init=cfg_module.network.get("source_gate_init", 0.5),
+            source_gate_classwise=cfg_module.network.get("source_gate_classwise", True),
         )
 
     elif cfg_module.network.name == "VIT_ppnet":
@@ -187,6 +192,11 @@ def build_model(cfg_module: DictConfig):
             source_aggregation=cfg_module.network.source_aggregation,
             source_top_k=cfg_module.network.source_top_k,
             source_max_weight=cfg_module.network.source_max_weight,
+            source_attention_hidden_dim=cfg_module.network.get("source_attention_hidden_dim", 64),
+            source_attention_dropout=cfg_module.network.get("source_attention_dropout", 0.0),
+            source_attention_classwise=cfg_module.network.get("source_attention_classwise", True),
+            source_gate_init=cfg_module.network.get("source_gate_init", 0.5),
+            source_gate_classwise=cfg_module.network.get("source_gate_classwise", True),
         )
 
     elif cfg_module.network.name == "VIT_MIM":

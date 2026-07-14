@@ -443,3 +443,155 @@ CUDA_VISIBLE_DEVICES=5 python finetune.py \
   data.transform.no_call_mixer=null \
   logger.run_name=sep_ppnet_hsn_train_cls_top2_hybrid_w05
 ```
+
+#### train classifier with selectable loss
+
+ASL:
+```bash
+CUDA_VISIBLE_DEVICES=5 /home/zhr21/anaconda3/envs/birdmae/bin/python finetune.py \
+  experiment=paper/bigshot/birdMAE/source_separation/hsn_base \
+  train=true \
+  test=true \
+  +init_ckpt_path="$PPNET_CKPT" \
+  ckpt_path=last \
+  module/loss=asymmetric_loss \
+  module.loss.gamma_neg=4 \
+  module.loss.gamma_pos=1 \
+  module.loss.clip=0.05 \
+  module.network.source_aggregation=hybrid_max_topk_mean_logits \
+  module.network.source_top_k=2 \
+  module.network.source_max_weight=0.5 \
+  module.network.freeze_backbone=true \
+  trainer.max_epochs=10 \
+  trainer.enable_checkpointing=True \
+  data.loaders.train.batch_size=8 \
+  data.loaders.val.batch_size=8 \
+  data.loaders.test.batch_size=8 \
+  data.loaders.train.num_workers=2 \
+  data.loaders.val.num_workers=2 \
+  data.loaders.test.num_workers=2 \
+  data.transform.waveform_augmentations=null \
+  data.transform.no_call_mixer=null \
+  logger.run_name=sep_ppnet_hsn_train_asl_gn4_gp1_clip005
+```
+
+Focal Loss:
+```bash
+CUDA_VISIBLE_DEVICES=5 /home/zhr21/anaconda3/envs/birdmae/bin/python finetune.py \
+  experiment=paper/bigshot/birdMAE/source_separation/hsn_base \
+  train=true \
+  test=true \
+  +init_ckpt_path="$PPNET_CKPT" \
+  ckpt_path=last \
+  module/loss=focal_loss \
+  module.loss.gamma=2.0 \
+  module.loss.alpha=null \
+  module.network.source_aggregation=hybrid_max_topk_mean_logits \
+  module.network.source_top_k=2 \
+  module.network.source_max_weight=0.5 \
+  module.network.freeze_backbone=true \
+  trainer.max_epochs=10 \
+  trainer.enable_checkpointing=True \
+  data.loaders.train.batch_size=8 \
+  data.loaders.val.batch_size=8 \
+  data.loaders.test.batch_size=8 \
+  data.loaders.train.num_workers=2 \
+  data.loaders.val.num_workers=2 \
+  data.loaders.test.num_workers=2 \
+  data.transform.waveform_augmentations=null \
+  data.transform.no_call_mixer=null \
+  logger.run_name=sep_ppnet_hsn_train_focal_g2
+```
+
+BCE + pairwise ranking:
+```bash
+CUDA_VISIBLE_DEVICES=5 /home/zhr21/anaconda3/envs/birdmae/bin/python finetune.py \
+  experiment=paper/bigshot/birdMAE/source_separation/hsn_base \
+  train=true \
+  test=true \
+  +init_ckpt_path="$PPNET_CKPT" \
+  ckpt_path=last \
+  module/loss=bce_ranking_loss \
+  module.loss.bce_weight=1.0 \
+  module.loss.ranking_weight=0.1 \
+  module.loss.margin=1.0 \
+  module.network.source_aggregation=hybrid_max_topk_mean_logits \
+  module.network.source_top_k=2 \
+  module.network.source_max_weight=0.5 \
+  module.network.freeze_backbone=true \
+  trainer.max_epochs=10 \
+  trainer.enable_checkpointing=True \
+  data.loaders.train.batch_size=8 \
+  data.loaders.val.batch_size=8 \
+  data.loaders.test.batch_size=8 \
+  data.loaders.train.num_workers=2 \
+  data.loaders.val.num_workers=2 \
+  data.loaders.test.num_workers=2 \
+  data.transform.waveform_augmentations=null \
+  data.transform.no_call_mixer=null \
+  logger.run_name=sep_ppnet_hsn_train_bce_rank_w01_m1
+```
+
+#### train learnable source aggregator
+
+Gated max + attention aggregator:
+```bash
+cd /data0/zhr21/GitHub_repo/Bird-MAE
+
+PPNET_CKPT=/data0/zhr21/GitHub_repo/Bird-MAE/logs/finetune_hsn/runs/HSN/VIT_ppnet/2026-07-01_230442/callback_checkpoints/last.ckpt
+
+CUDA_VISIBLE_DEVICES=5 /home/zhr21/anaconda3/envs/birdmae/bin/python finetune.py \
+  experiment=paper/bigshot/birdMAE/source_separation/hsn_base \
+  train=true \
+  test=true \
+  +init_ckpt_path="$PPNET_CKPT" \
+  ckpt_path=last \
+  module/loss=asymmetric_loss \
+  module.network.source_aggregation=gated_max_attention_logits \
+  module.network.source_attention_hidden_dim=64 \
+  module.network.source_attention_dropout=0.1 \
+  module.network.source_attention_classwise=true \
+  module.network.source_gate_init=0.5 \
+  module.network.source_gate_classwise=true \
+  module.network.freeze_backbone=true \
+  trainer.max_epochs=10 \
+  trainer.enable_checkpointing=True \
+  trainer.check_val_every_n_epoch=1 \
+  data.loaders.train.batch_size=8 \
+  data.loaders.val.batch_size=8 \
+  data.loaders.test.batch_size=8 \
+  data.loaders.train.num_workers=2 \
+  data.loaders.val.num_workers=2 \
+  data.loaders.test.num_workers=2 \
+  data.transform.waveform_augmentations=null \
+  data.transform.no_call_mixer=null \
+  logger.run_name=sep_ppnet_hsn_train_gated_attn_h64_d01_asl
+```
+
+Attention-only aggregator:
+```bash
+CUDA_VISIBLE_DEVICES=5 /home/zhr21/anaconda3/envs/birdmae/bin/python finetune.py \
+  experiment=paper/bigshot/birdMAE/source_separation/hsn_base \
+  train=true \
+  test=true \
+  +init_ckpt_path="$PPNET_CKPT" \
+  ckpt_path=last \
+  module/loss=asymmetric_loss \
+  module.network.source_aggregation=learned_attention_logits \
+  module.network.source_attention_hidden_dim=64 \
+  module.network.source_attention_dropout=0.1 \
+  module.network.source_attention_classwise=true \
+  module.network.freeze_backbone=true \
+  trainer.max_epochs=10 \
+  trainer.enable_checkpointing=True \
+  trainer.check_val_every_n_epoch=1 \
+  data.loaders.train.batch_size=8 \
+  data.loaders.val.batch_size=8 \
+  data.loaders.test.batch_size=8 \
+  data.loaders.train.num_workers=2 \
+  data.loaders.val.num_workers=2 \
+  data.loaders.test.num_workers=2 \
+  data.transform.waveform_augmentations=null \
+  data.transform.no_call_mixer=null \
+  logger.run_name=sep_ppnet_hsn_train_attn_h64_d01_asl
+```

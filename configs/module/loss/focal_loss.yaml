@@ -1,0 +1,4 @@
+_target_: util.multilabel_losses.FocalLossMultiLabel
+gamma: 2.0
+alpha: null
+reduction: mean

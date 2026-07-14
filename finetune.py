@@ -97,7 +97,11 @@ def finetune(cfg: DictConfig):
                     param.requires_grad = False
         elif "ppnet" in cfg.module.network.name.lower():
             for name, param in model.named_parameters():
-                if 'ppnet' not in name:
+                if (
+                    'ppnet' not in name
+                    and 'source_attention' not in name
+                    and 'source_gate' not in name
+                ):
                     param.requires_grad = False
         else:
             if cfg.module.network.get("global_pool", "") == "attentive":

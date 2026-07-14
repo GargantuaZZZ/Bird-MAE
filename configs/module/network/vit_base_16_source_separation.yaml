@@ -27,10 +27,16 @@ mask_inference: null
 
 # Options: max, noisy_or, mean_probs, mean_logits, topk_mean_probs,
 # topk_mean_logits, hybrid_max_mean_probs, hybrid_max_mean_logits,
-# hybrid_max_topk_mean_probs, hybrid_max_topk_mean_logits.
+# hybrid_max_topk_mean_probs, hybrid_max_topk_mean_logits,
+# learned_attention_logits, gated_max_attention_logits.
 source_aggregation: max
 source_top_k: 2
 source_max_weight: 0.7
+source_attention_hidden_dim: 64
+source_attention_dropout: 0.0
+source_attention_classwise: true
+source_gate_init: 0.5
+source_gate_classwise: true
 
 ppnet:
   num_prototypes: 420

@@ -522,12 +522,35 @@ class VIT_SourceSeparation(VIT):
         source_aggregation="max",
         source_top_k=2,
         source_max_weight=0.7,
+        source_attention_hidden_dim=64,
+        source_attention_dropout=0.0,
+        source_attention_classwise=True,
+        source_gate_init=0.5,
+        source_gate_classwise=True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.source_aggregation = source_aggregation
         self.source_top_k = source_top_k
         self.source_max_weight = source_max_weight
+        self.source_attention_classwise = source_attention_classwise
+        gate_size = self.num_classes if source_gate_classwise else 1
+        gate_init = torch.tensor(float(source_gate_init)).clamp(1e-4, 1.0 - 1e-4)
+        self.source_gate = nn.Parameter(torch.logit(gate_init).repeat(gate_size))
+        attention_out_dim = self.num_classes if source_attention_classwise else 1
+        attention_layers = []
+        if int(source_attention_hidden_dim) > 0:
+            attention_layers.extend(
+                [
+                    nn.Linear(self.num_classes, int(source_attention_hidden_dim)),
+                    nn.GELU(),
+                    nn.Dropout(float(source_attention_dropout)),
+                    nn.Linear(int(source_attention_hidden_dim), attention_out_dim),
+                ]
+            )
+        else:
+            attention_layers.append(nn.Linear(self.num_classes, attention_out_dim))
+        self.source_attention = nn.Sequential(*attention_layers)
 
     @staticmethod
     def _probs_to_logits(probs):
@@ -536,6 +559,17 @@ class VIT_SourceSeparation(VIT):
         return torch.logit(probs)
 
     def aggregate_source_logits(self, source_logits):
+        if self.source_aggregation == "learned_attention_logits":
+            attention_scores = self.source_attention(source_logits)
+            attention_weights = attention_scores.softmax(dim=1)
+            return (attention_weights * source_logits).sum(dim=1)
+        if self.source_aggregation == "gated_max_attention_logits":
+            attention_scores = self.source_attention(source_logits)
+            attention_weights = attention_scores.softmax(dim=1)
+            attention_logits = (attention_weights * source_logits).sum(dim=1)
+            max_logits = source_logits.max(dim=1).values
+            gate = self.source_gate.sigmoid()
+            return gate * max_logits + (1.0 - gate) * attention_logits
         if self.source_aggregation == "max":
             return source_logits.max(dim=1).values
         if self.source_aggregation == "mean_logits":
@@ -1206,12 +1240,35 @@ class VIT_ppnet_SourceSeparation(VIT_ppnet):
         source_aggregation="max",
         source_top_k=2,
         source_max_weight=0.7,
+        source_attention_hidden_dim=64,
+        source_attention_dropout=0.0,
+        source_attention_classwise=True,
+        source_gate_init=0.5,
+        source_gate_classwise=True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.source_aggregation = source_aggregation
         self.source_top_k = source_top_k
         self.source_max_weight = source_max_weight
+        self.source_attention_classwise = source_attention_classwise
+        gate_size = self.num_classes if source_gate_classwise else 1
+        gate_init = torch.tensor(float(source_gate_init)).clamp(1e-4, 1.0 - 1e-4)
+        self.source_gate = nn.Parameter(torch.logit(gate_init).repeat(gate_size))
+        attention_out_dim = self.num_classes if source_attention_classwise else 1
+        attention_layers = []
+        if int(source_attention_hidden_dim) > 0:
+            attention_layers.extend(
+                [
+                    nn.Linear(self.num_classes, int(source_attention_hidden_dim)),
+                    nn.GELU(),
+                    nn.Dropout(float(source_attention_dropout)),
+                    nn.Linear(int(source_attention_hidden_dim), attention_out_dim),
+                ]
+            )
+        else:
+            attention_layers.append(nn.Linear(self.num_classes, attention_out_dim))
+        self.source_attention = nn.Sequential(*attention_layers)
 
     @staticmethod
     def _probs_to_logits(probs):
@@ -1220,6 +1277,17 @@ class VIT_ppnet_SourceSeparation(VIT_ppnet):
         return torch.logit(probs)
 
     def aggregate_source_logits(self, source_logits):
+        if self.source_aggregation == "learned_attention_logits":
+            attention_scores = self.source_attention(source_logits)
+            attention_weights = attention_scores.softmax(dim=1)
+            return (attention_weights * source_logits).sum(dim=1)
+        if self.source_aggregation == "gated_max_attention_logits":
+            attention_scores = self.source_attention(source_logits)
+            attention_weights = attention_scores.softmax(dim=1)
+            attention_logits = (attention_weights * source_logits).sum(dim=1)
+            max_logits = source_logits.max(dim=1).values
+            gate = self.source_gate.sigmoid()
+            return gate * max_logits + (1.0 - gate) * attention_logits
         if self.source_aggregation == "max":
             return source_logits.max(dim=1).values
         if self.source_aggregation == "mean_logits":
